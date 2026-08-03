@@ -35,55 +35,45 @@ public:
 class Framing
 {
 public:
+    static constexpr size_t PAYLOAD_LENGTH = 48;
+
     Header header;
     Payload payload;
     Trailer trailer;
 
-    // Convert one string into bits
-    vector<int> convertToBits(const string &text)
+    bool createFrame(const vector<string> &bitData,
+                     size_t &dataIndex,
+                     size_t &bitIndex)
     {
-        vector<int> bits;
-        bits.reserve(text.size() * 8);
+        payload.bits.clear();
+        payload.bits.reserve(PAYLOAD_LENGTH);
 
-        for (int i = 0; i < (int)text.size(); i++)
+        while (dataIndex < bitData.size() &&
+               payload.bits.size() < PAYLOAD_LENGTH)
         {
-            unsigned char character =
-                static_cast<unsigned char>(text[i]);
+            const string &part = bitData[dataIndex];
 
-            // Extract bits from MSB to LSB
-            for (int bitPosition = 7; bitPosition >= 0; bitPosition--)
+            while (bitIndex < part.size() &&
+                   payload.bits.size() < PAYLOAD_LENGTH)
             {
-                int bit = (character >> bitPosition) & 1;
-                bits.push_back(bit);
+                payload.bits.push_back(part[bitIndex] == '1' ? 1 : 0);
+                ++bitIndex;
+            }
+
+            if (bitIndex == part.size())
+            {
+                ++dataIndex;
+                bitIndex = 0;
             }
         }
 
-        return bits;
-    }
-
-    void createFrame(const vector<string> &fileData)
-    {
-        constexpr size_t payloadLength = 48;
-        string frameData;
-
-        frameData.reserve(payloadLength);
-
-        for (const string &part : fileData)
+        if (payload.bits.empty())
         {
-            const size_t remaining = payloadLength - frameData.size();
-            if (remaining == 0)
-            {
-                break;
-            }
-
-            const size_t bytesToCopy =
-                part.size() < remaining ? part.size() : remaining;
-            frameData.append(part, 0, bytesToCopy);
+            return false;
         }
 
-        frameData.resize(payloadLength, '\0');
-        header.payloadLength = static_cast<int>(payloadLength);
-
-        payload.bits = convertToBits(frameData);
+        payload.bits.resize(PAYLOAD_LENGTH, 0);
+        header.payloadLength = static_cast<int>(PAYLOAD_LENGTH);
+        return true;
     }
 };
