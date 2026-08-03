@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "./CommonFunctions/binaryToString.cpp"
+#include "./Sender/ErrorInjection/errorInjection.cpp"
 #include "./Sender/Frame.cpp"
 
 using namespace std;
@@ -91,6 +92,28 @@ int main()
         frame.header.frameNumber =
             static_cast<int>(frames.size() + 1);
         frames.push_back(std::move(frame));
+    }
+
+    cout << "Choose error injection type:\n"
+         << "1. One-bit error\n"
+         << "2. Two-bit error\n"
+         << "3. Burst error\n"
+         << "4. Odd-position bits error\n"
+         << "Enter option: ";
+
+    int errorChoice = 0;
+    if (!(cin >> errorChoice) || errorChoice < 1 || errorChoice > 4)
+    {
+        cerr << "Invalid error injection option\n";
+        return 1;
+    }
+
+    ErrorInjector errorInjector;
+    const ErrorType errorType = static_cast<ErrorType>(errorChoice);
+
+    for (Framing &frame : frames)
+    {
+        errorInjector.inject(frame.payload.bits, errorType);
     }
 
     const filesystem::path framesDirectory = "Sender/Frames";
