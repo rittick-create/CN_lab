@@ -1,0 +1,72 @@
+EVALUATION TABLE (100 trials)
+
+Scheme       Error      Detected   Avg time (us)
+--------------------------------------------------
+Checksum-16  Single     100/100    8.970
+Checksum-16  Two bits   98/100     7.450
+Checksum-16  Odd bits   99/100     7.610
+Checksum-16  Burst      100/100    7.570
+CRC-8        Single     100/100    44.760
+CRC-8        Two bits   100/100    45.340
+CRC-8        Odd bits   100/100    45.970
+CRC-8        Burst      100/100    44.930
+CRC-10       Single     100/100    50.480
+CRC-10       Two bits   100/100    51.860
+CRC-10       Odd bits   100/100    51.100
+CRC-10       Burst      100/100    52.280
+CRC-16       Single     100/100    80.760
+CRC-16       Two bits   100/100    93.520
+CRC-16       Odd bits   100/100    107.040
+CRC-16       Burst      100/100    74.960
+CRC-32       Single     100/100    126.480
+CRC-32       Two bits   100/100    127.460
+CRC-32       Odd bits   100/100    124.400
+CRC-32       Burst      100/100    125.630
+
+ASCII GRAPH (# = 5% detection)
+
+Checksum-16  Single      #################### 100%
+Checksum-16  Two bits    ################### 98%
+Checksum-16  Odd bits    ################### 99%
+Checksum-16  Burst       #################### 100%
+CRC-8        Single      #################### 100%
+CRC-8        Two bits    #################### 100%
+CRC-8        Odd bits    #################### 100%
+CRC-8        Burst       #################### 100%
+CRC-10       Single      #################### 100%
+CRC-10       Two bits    #################### 100%
+CRC-10       Odd bits    #################### 100%
+CRC-10       Burst       #################### 100%
+CRC-16       Single      #################### 100%
+CRC-16       Two bits    #################### 100%
+CRC-16       Odd bits    #################### 100%
+CRC-16       Burst       #################### 100%
+CRC-32       Single      #################### 100%
+CRC-32       Two bits    #################### 100%
+CRC-32       Odd bits    #################### 100%
+CRC-32       Burst       #################### 100%
+
+SPECIAL COMPARISON CASES
+D = detected, M = missed
+
+CRC      Case              Checksum  CRC
+---------------------------------------------
+CRC-8    Both detect       D         D
+CRC-8    CRC only          M         D
+CRC-8    Checksum only     D         M
+CRC-10   Both detect       D         D
+CRC-10   CRC only          M         D
+CRC-10   Checksum only     D         M
+CRC-16   Both detect       D         D
+CRC-16   CRC only          M         D
+CRC-16   Checksum only     D         M
+CRC-32   Both detect       D         D
+CRC-32   CRC only          M         D
+CRC-32   Checksum only     D         M
+
+RESOURCE USE (extra bits per frame)
+Checksum-16: 16
+CRC-8: 8
+CRC-10: 10
+CRC-16: 16
+CRC-32: 32

@@ -1,0 +1,9 @@
+Input file: textfile.txt
+Frames: 1
+Error: No error
+
+Frame 1
+Check bits: 1010110100100110
+Changed positions: None
+Result: ACCEPTED - No checksum error
+

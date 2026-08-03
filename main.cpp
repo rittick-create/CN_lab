@@ -1,154 +1,171 @@
-#include <iostream>
-#include <fstream>
+#include <cstdlib>
+#include <ctime>
 #include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <sstream>
 #include <string>
-#include <utility>
 #include <vector>
-
-#include "./CommonFunctions/binaryToString.cpp"
-#include "./Sender/ErrorInjection/errorInjection.cpp"
-#include "./Sender/Frame.cpp"
-
+#include "CommonFunctions/binaryToString.cpp"
+#include "Sender/Frame.cpp"
+#include "Sender/ErrorInjection/errorInjection.cpp"
+#include "ErrorDetection/Checksum/Checksum.cpp"
+#include "ErrorDetection/CRC/CRC.cpp"
+#include "Receiver/receiver.cpp"
+#include "Evaluation/evaluation.cpp"
 using namespace std;
-
-int main()
+string errorName(int choice)
 {
-    //Take the input from the text file
-    ifstream file("textfile.txt");
-
-    if (!file.is_open())
+    if (choice == 0)
+        return "No error";
+    if (choice == 1)
+        return "Single-bit error";
+    if (choice == 2)
+        return "Two isolated bit errors";
+    if (choice == 3)
+        return "Odd number of errors";
+    return "Burst error";
+}
+string positionsText(const vector<int> &positions)
+{
+    if (positions.empty())
+        return "None";
+    string text;
+    for (size_t index = 0; index < positions.size(); index++)
     {
-        cout << "Could not open the file\n";
+        if (index > 0)
+            text += ", ";
+        text += to_string(positions[index]);
+    }
+    return text;
+}
+void showMenu()
+{
+    cout << "\nChoose an operation:\n"
+         << "1. Checksum-16\n"
+         << "2. CRC\n"
+         << "3. Evaluate all schemes\n"
+         << "Enter choice: ";
+}
+void showErrorMenu()
+{
+    cout << "\nChoose error type:\n"
+         << "0. No error\n"
+         << "1. Single-bit error\n"
+         << "2. Two isolated bit errors\n"
+         << "3. Odd number of errors\n"
+         << "4. Burst error\n"
+         << "Enter choice: ";
+}
+int main(int argc, char *argv[])
+{
+    if (argc != 2)
+    {
+        cout << "Usage: ./cn_lab <input-file>\n"
+             << "Example: ./cn_lab textfile.txt\n";
         return 1;
     }
-
-    vector<string> fileData;
-    string line;
-
-    while (getline(file, line))
+    string inputFile = argv[1];
+    if (!filesystem::exists(inputFile))
     {
-        fileData.push_back(line);
-    }
-
-    file.close();
-
-    const filesystem::path outputDirectory =
-        "Sender/Input file(Bits)";
-    filesystem::create_directories(outputDirectory);
-
-    const filesystem::path bitsPath =
-        outputDirectory / "input_bits.txt";
-    filesystem::remove(bitsPath);
-
-    ofstream bitsFile(bitsPath, ios::trunc);
-    if (!bitsFile.is_open())
-    {
-        cerr << "Could not create the bits file\n";
+        cout << "Could not find " << inputFile << '\n';
         return 1;
     }
-
-    vector<string> bitData;
-    bitData.reserve(fileData.size());
-    size_t totalBits = 0;
-
-    for (size_t index = 0; index < fileData.size(); ++index)
+    string fileText = readTextFile(inputFile);
+    if (fileText.empty())
     {
-        const vector<int> bits =
-            strToBinary(fileData[index]);
-        bitData.emplace_back();
-        string &bitString = bitData.back();
-        bitString.reserve(bits.size());
-
-        for (int bit : bits)
-        {
-            const char bitCharacter = bit == 0 ? '0' : '1';
-            bitString.push_back(bitCharacter);
-            bitsFile.put(bitCharacter);
-        }
-
-        totalBits += bits.size();
-
-        if (index + 1 < fileData.size())
-        {
-            bitsFile.put('\n');
-        }
-    }
-
-    vector<Framing> frames;
-    frames.reserve((totalBits + Framing::PAYLOAD_LENGTH - 1) /
-                   Framing::PAYLOAD_LENGTH);
-
-    size_t dataIndex = 0;
-    size_t bitIndex = 0;
-
-    while (dataIndex < bitData.size())
-    {
-        Framing frame;
-        if (!frame.createFrame(bitData, dataIndex, bitIndex))
-        {
-            break;
-        }
-
-        frame.header.frameNumber =
-            static_cast<int>(frames.size() + 1);
-        frames.push_back(std::move(frame));
-    }
-
-    cout << "Choose error injection type:\n"
-         << "1. One-bit error\n"
-         << "2. Two-bit error\n"
-         << "3. Burst error\n"
-         << "4. Odd-position bits error\n"
-         << "Enter option: ";
-
-    int errorChoice = 0;
-    if (!(cin >> errorChoice) || errorChoice < 1 || errorChoice > 4)
-    {
-        cerr << "Invalid error injection option\n";
+        cout << "The input file is empty.\n";
         return 1;
     }
-
-    ErrorInjector errorInjector;
-    const ErrorType errorType = static_cast<ErrorType>(errorChoice);
-
-    for (Framing &frame : frames)
+    vector<int> allBits = strToBinary(fileText);
+    saveBits("Sender/Input file(Bits)/input_bits.txt", allBits);
+    Framing framing;
+    vector<Frame> frames = framing.createFrames(allBits);
+    srand(static_cast<unsigned int>(time(0)));
+    cout << "\nInput text  : " << fileText << '\n'
+         << "Input bits  : " << allBits.size() << '\n'
+         << "Frame size  : 368 payload bits (46 bytes)\n"
+         << "Total frames: " << frames.size() << '\n';
+    showMenu();
+    int operation;
+    cin >> operation;
+    if (operation == 3)
     {
-        errorInjector.inject(frame.payload.bits, errorType);
+        Evaluation evaluation;
+        evaluation.run(frames[0]);
+        return 0;
     }
-
-    const filesystem::path framesDirectory = "Sender/Frames";
-    filesystem::create_directories(framesDirectory);
-
-    for (const filesystem::directory_entry &entry :
-         filesystem::directory_iterator(framesDirectory))
+    if (operation != 1 && operation != 2)
     {
-        const string fileName = entry.path().filename().string();
-        if (entry.is_regular_file() &&
-            fileName.rfind("frame_", 0) == 0 &&
-            entry.path().extension() == ".txt")
-        {
-            filesystem::remove(entry.path());
-        }
+        cout << "Invalid operation.\n";
+        return 1;
     }
-
-    for (size_t index = 0; index < frames.size(); ++index)
+    int crcType = CRC8;
+    if (operation == 2)
     {
-        const filesystem::path framePath =
-            framesDirectory /
-            ("frame_" + to_string(index + 1) + ".txt");
-        ofstream frameFile(framePath, ios::trunc);
-
-        if (!frameFile.is_open())
+        cout << "\nChoose CRC: 1.CRC-8  2.CRC-10  "
+             << "3.CRC-16  4.CRC-32\nEnter choice: ";
+        cin >> crcType;
+        if (crcType < 1 || crcType > 4)
         {
-            cerr << "Could not create " << framePath << '\n';
+            cout << "Invalid CRC choice.\n";
             return 1;
         }
-
-        for (int bit : frames[index].payload.bits)
-        {
-            frameFile.put(bit == 0 ? '0' : '1');
-        }
     }
-
+    showErrorMenu();
+    int errorChoice;
+    cin >> errorChoice;
+    if (errorChoice < 0 || errorChoice > 4)
+    {
+        cout << "Invalid error choice.\n";
+        return 1;
+    }
+    ErrorInjector injector;
+    Receiver receiver;
+    Checksum checksum;
+    CRC crc;
+    ostringstream resultFile;
+    resultFile << "Input file: " << inputFile << '\n'
+               << "Frames: " << frames.size() << '\n'
+               << "Error: " << errorName(errorChoice) << "\n\n";
+    for (Frame frame : frames)
+    {
+        vector<int> cleanCodeword;
+        string checkBits;
+        if (operation == 1)
+        {
+            cleanCodeword = checksum.createCodeword(frame.payload);
+            checkBits = checksum.checksumText(frame.payload);
+        }
+        else
+        {
+            cleanCodeword = crc.createCodeword(frame.payload, crcType);
+            checkBits = crc.remainderText(frame.payload, crcType);
+        }
+        vector<int> sentCodeword = cleanCodeword;
+        vector<int> changed = injector.inject(
+            sentCodeword, errorChoice, frame.payload.size());
+        string receiverResult = operation == 1
+                                    ? receiver.checkChecksum(sentCodeword)
+                                    : receiver.checkCRC(sentCodeword, crcType);
+        string number = to_string(frame.frameNumber);
+        saveBits("Sender/Frames/clean_frame_" + number + ".txt",
+                 cleanCodeword);
+        saveBits("Sender/Frames/sent_frame_" + number + ".txt",
+                 sentCodeword);
+        cout << "\nFrame " << frame.frameNumber << '\n'
+             << "Check bits       : " << checkBits << '\n'
+             << "Changed positions: " << positionsText(changed) << '\n'
+             << "Receiver result  : " << receiverResult << '\n';
+        resultFile << "Frame " << frame.frameNumber << '\n'
+                   << "Check bits: " << checkBits << '\n'
+                   << "Changed positions: " << positionsText(changed) << '\n'
+                   << "Result: " << receiverResult << "\n\n";
+    }
+    filesystem::create_directories("Receiver");
+    ofstream receiverOutput("Receiver/result.txt");
+    receiverOutput << resultFile.str();
+    cout << "\nClean and sent frames are in Sender/Frames.\n"
+         << "Receiver result is in Receiver/result.txt.\n";
     return 0;
 }

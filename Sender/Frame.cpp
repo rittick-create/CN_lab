@@ -1,79 +1,49 @@
-#include <string>
 #include <vector>
 
 using namespace std;
 
-class Header
+class Frame
 {
 public:
-    string sourceMac;
-    string destinationMac;
     int frameNumber;
-    int payloadLength;
-
-    Header()
-    {
-        sourceMac = "";
-        destinationMac = "";
-        frameNumber = 0;
-        payloadLength = 0;
-    }
-};
-
-class Payload
-{
-public:
-    vector<int> bits;
-};
-
-class Trailer
-{
-public:
-    string errorBits;
+    int originalBitCount;
+    vector<int> payload;
 };
 
 class Framing
 {
 public:
-    static constexpr size_t PAYLOAD_LENGTH = 48;
+    static const int PAYLOAD_LENGTH = 46 * 8;
 
-    Header header;
-    Payload payload;
-    Trailer trailer;
-
-    bool createFrame(const vector<string> &bitData,
-                     size_t &dataIndex,
-                     size_t &bitIndex)
+    vector<Frame> createFrames(const vector<int> &allBits)
     {
-        payload.bits.clear();
-        payload.bits.reserve(PAYLOAD_LENGTH);
+        vector<Frame> frames;
+        int current = 0;
+        int number = 1;
 
-        while (dataIndex < bitData.size() &&
-               payload.bits.size() < PAYLOAD_LENGTH)
+        while (current < static_cast<int>(allBits.size()))
         {
-            const string &part = bitData[dataIndex];
+            Frame frame;
+            frame.frameNumber = number;
+            frame.originalBitCount = 0;
 
-            while (bitIndex < part.size() &&
-                   payload.bits.size() < PAYLOAD_LENGTH)
+            while (current < static_cast<int>(allBits.size()) &&
+                   frame.payload.size() < PAYLOAD_LENGTH)
             {
-                payload.bits.push_back(part[bitIndex] == '1' ? 1 : 0);
-                ++bitIndex;
+                frame.payload.push_back(allBits[current]);
+                current++;
+                frame.originalBitCount++;
             }
 
-            if (bitIndex == part.size())
+            while (frame.payload.size() < PAYLOAD_LENGTH)
             {
-                ++dataIndex;
-                bitIndex = 0;
+                frame.payload.push_back(0);
             }
+
+            frames.push_back(frame);
+            number++;
         }
 
-        if (payload.bits.empty())
-        {
-            return false;
-        }
-
-        payload.bits.resize(PAYLOAD_LENGTH, 0);
-        header.payloadLength = static_cast<int>(PAYLOAD_LENGTH);
-        return true;
+        return frames;
     }
 };

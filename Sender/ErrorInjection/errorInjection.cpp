@@ -1,106 +1,91 @@
 #include <algorithm>
-#include <random>
+#include <cstdlib>
 #include <vector>
 
-enum class ErrorType
+using namespace std;
+
+enum ErrorType
 {
-    OneBit = 1,
-    TwoBit = 2,
-    Burst = 3,
-    OddBits = 4
+    NO_ERROR = 0,
+    SINGLE_BIT = 1,
+    TWO_BITS = 2,
+    ODD_BITS = 3,
+    BURST_ERROR = 4
 };
 
 class ErrorInjector
 {
-public:
-    ErrorInjector() : generator(std::random_device{}())
-    {
-    }
-
-    void inject(std::vector<int> &bits, ErrorType type)
-    {
-        if (bits.empty())
-        {
-            return;
-        }
-
-        switch (type)
-        {
-        case ErrorType::OneBit:
-            flip(bits, randomPosition(bits.size()));
-            break;
-
-        case ErrorType::TwoBit:
-            injectTwoBitError(bits);
-            break;
-
-        case ErrorType::Burst:
-            injectBurstError(bits);
-            break;
-
-        case ErrorType::OddBits:
-            injectOddBitErrors(bits);
-            break;
-        }
-    }
-
 private:
-    std::mt19937 generator;
-
-    size_t randomPosition(size_t bitCount)
+    void flip(vector<int> &bits, int position)
     {
-        std::uniform_int_distribution<size_t> distribution(0,
-                                                            bitCount - 1);
-        return distribution(generator);
+        bits[position] = bits[position] == 0 ? 1 : 0;
     }
 
-    static void flip(std::vector<int> &bits, size_t position)
+    bool alreadyChosen(const vector<int> &positions, int value)
     {
-        bits[position] ^= 1;
+        return find(positions.begin(), positions.end(), value) !=
+               positions.end();
     }
 
-    void injectTwoBitError(std::vector<int> &bits)
+public:
+    vector<int> inject(vector<int> &bits,
+                       int errorType,
+                       int payloadLength)
     {
-        const size_t first = randomPosition(bits.size());
+        vector<int> positions;
 
-        if (bits.size() == 1)
+        if (errorType == NO_ERROR || payloadLength == 0)
         {
-            flip(bits, first);
-            return;
+            return positions;
         }
 
-        size_t second = randomPosition(bits.size());
-        while (second == first)
+        if (errorType == SINGLE_BIT)
         {
-            second = randomPosition(bits.size());
+            positions.push_back(rand() % payloadLength);
+        }
+        else if (errorType == TWO_BITS)
+        {
+            int first = rand() % payloadLength;
+            int second = rand() % payloadLength;
+
+            while (second == first || abs(second - first) == 1)
+            {
+                second = rand() % payloadLength;
+            }
+
+            positions.push_back(first);
+            positions.push_back(second);
+        }
+        else if (errorType == ODD_BITS)
+        {
+            while (positions.size() < 3)
+            {
+                int value = rand() % payloadLength;
+
+                if (!alreadyChosen(positions, value))
+                {
+                    positions.push_back(value);
+                }
+            }
+        }
+        else if (errorType == BURST_ERROR)
+        {
+            int burstLength = 4;
+            int start = rand() % (payloadLength - burstLength + 1);
+
+            for (int index = 0; index < burstLength; index++)
+            {
+                positions.push_back(start + index);
+            }
         }
 
-        flip(bits, first);
-        flip(bits, second);
-    }
+        sort(positions.begin(), positions.end());
 
-    void injectBurstError(std::vector<int> &bits)
-    {
-        constexpr size_t maximumBurstLength = 4;
-        const size_t burstLength =
-            std::min(maximumBurstLength, bits.size());
-        std::uniform_int_distribution<size_t> distribution(
-            0, bits.size() - burstLength);
-        const size_t start = distribution(generator);
-
-        for (size_t index = start;
-             index < start + burstLength;
-             ++index)
+        for (int position : positions)
         {
-            flip(bits, index);
+            flip(bits, position);
         }
-    }
 
-    static void injectOddBitErrors(std::vector<int> &bits)
-    {
-        for (size_t index = 0; index < bits.size(); index += 2)
-        {
-            flip(bits, index);
-        }
+        return positions;
     }
 };
