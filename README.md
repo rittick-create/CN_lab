@@ -44,6 +44,10 @@ Checksum (16-bit)
 
 =>In our case the header file will contain the source mac the destination mac(We will include this somehow) and payload length and will also contain the error detection type.
 
-=>
+->checksum redundant bits and detection added
+
+
+
+
 
 
