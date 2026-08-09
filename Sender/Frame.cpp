@@ -1,49 +1,64 @@
-#include <vector>
+#include <string>
 
 using namespace std;
 
-class Frame
-{
-public:
-    int frameNumber;
-    int originalBitCount;
-    vector<int> payload;
+// Every frame can store 48 payload bits.
+const int PAYLOAD_SIZE = 48;
+
+// Stores information placed at the beginning of a frame.
+class Header {
+private:
+    // Temporary MAC addresses until MAC generation is added.
+    const long long sourceMac = 123456789012;
+    const long long destinationMac = 210987654321;
+    const int payloadLength = PAYLOAD_SIZE;
+    string errorDetectionType = "NONE";
 };
 
-class Framing
-{
+// Stores the actual data carried by a frame.
+class Payload {
+private:
+    string bits;
+
 public:
-    static const int PAYLOAD_LENGTH = 46 * 8;
-
-    vector<Frame> createFrames(const vector<int> &allBits)
-    {
-        vector<Frame> frames;
-        int current = 0;
-        int number = 1;
-
-        while (current < static_cast<int>(allBits.size()))
-        {
-            Frame frame;
-            frame.frameNumber = number;
-            frame.originalBitCount = 0;
-
-            while (current < static_cast<int>(allBits.size()) &&
-                   frame.payload.size() < PAYLOAD_LENGTH)
-            {
-                frame.payload.push_back(allBits[current]);
-                current++;
-                frame.originalBitCount++;
-            }
-
-            while (frame.payload.size() < PAYLOAD_LENGTH)
-            {
-                frame.payload.push_back(0);
-            }
-
-            frames.push_back(frame);
-            number++;
+    // Store exactly 48 bits and add zero padding when needed.
+    void storeBits(string payloadBits) {
+        if (payloadBits.length() > PAYLOAD_SIZE) {
+            payloadBits = payloadBits.substr(0, PAYLOAD_SIZE);
         }
 
-        return frames;
+        // Add one zero at a time until 48 bits are stored.
+        while (payloadBits.length() < PAYLOAD_SIZE) {
+            payloadBits += '0';
+        }
+
+        bits = payloadBits;
+    }
+
+    string getBits() {
+        return bits;
+    }
+};
+
+// Stores information placed at the end of a frame.
+class Trailer {
+    // Trailer fields will be added here.
+};
+
+// A complete frame contains a header, payload, and trailer.
+class Frame {
+private:
+    Header header;
+    Payload payload;
+    Trailer trailer;
+
+public:
+    // Create a frame and place the given bits in its payload.
+    Frame(string payloadBits) {
+        payload.storeBits(payloadBits);
+    }
+
+    string getPayloadBits() {
+        return payload.getBits();
     }
 };
