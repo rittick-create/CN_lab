@@ -4,6 +4,7 @@ using namespace std;
 
 // Every frame can store 48 payload bits.
 const int PAYLOAD_SIZE = 48;
+const int HEADER_SIZE = 128;
 
 // Convert a number into a fixed number of bits.
 string numberToBits(long long number, int totalBits) {
@@ -46,9 +47,21 @@ public:
         string bits = "";
         int errorDetectionCode = 0;
 
-        // For now, CHECKSUM16 is the only available type.
+        // Store the selected method as a fixed 16-bit code.
         if (errorDetectionType == "CHECKSUM16") {
             errorDetectionCode = 1;
+        }
+        else if (errorDetectionType == "CRC8") {
+            errorDetectionCode = 2;
+        }
+        else if (errorDetectionType == "CRC10") {
+            errorDetectionCode = 3;
+        }
+        else if (errorDetectionType == "CRC16") {
+            errorDetectionCode = 4;
+        }
+        else if (errorDetectionType == "CRC32") {
+            errorDetectionCode = 5;
         }
 
         bits += numberToBits(sourceMac, 48);
@@ -88,15 +101,15 @@ public:
 // Stores information placed at the end of a frame.
 class Trailer {
 private:
-    string checksumBits;
+    string errorDetectionBits;
 
 public:
-    void storeChecksum(string checksum) {
-        checksumBits = checksum;
+    void storeErrorDetectionBits(string bits) {
+        errorDetectionBits = bits;
     }
 
-    string getChecksum() {
-        return checksumBits;
+    string getErrorDetectionBits() {
+        return errorDetectionBits;
     }
 };
 
@@ -126,11 +139,16 @@ public:
         return header.getErrorDetectionType();
     }
 
-    void storeChecksum(string checksum) {
-        trailer.storeChecksum(checksum);
+    void storeErrorDetectionBits(string bits) {
+        trailer.storeErrorDetectionBits(bits);
     }
 
-    string getChecksum() {
-        return trailer.getChecksum();
+    string getErrorDetectionBits() {
+        return trailer.getErrorDetectionBits();
+    }
+
+    // Combine the complete frame before transmission.
+    string getCompleteFrameBits() {
+        return getHeaderBits() + getPayloadBits() + getErrorDetectionBits();
     }
 };

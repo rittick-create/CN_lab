@@ -6,6 +6,10 @@
 #include "Sender/Frame.cpp"
 #include "ErrorDetection/Checksum/Checksum.cpp"
 #include "ErrorDetection/Checksum/ChecksumDetection.cpp"
+#include "ErrorDetection/CRC/CRC.cpp"
+#include "ErrorDetection/CRC/CRCDetection.cpp"
+#include "Sender/ErrorInjection/errorInjection.cpp"
+#include "Receiver/receiver.cpp"
 
 using namespace std;
 
@@ -61,8 +65,35 @@ void addChecksums(vector<Frame>& frames) {
             frames[i].getPayloadBits()
         );
 
-        frames[i].storeChecksum(checksum);
+        frames[i].storeErrorDetectionBits(checksum);
     }
+}
+
+// Generate and store CRC bits in every frame.
+bool addCRCs(vector<Frame>& frames, string errorDetectionType) {
+    string generator = getCRCGenerator(errorDetectionType);
+
+    if (generator == "") {
+        return false;
+    }
+
+    int totalFrames = frames.size();
+
+    for (int i = 0; i < totalFrames; i++) {
+        string crc = generateCRC(
+            frames[i].getHeaderBits(),
+            frames[i].getPayloadBits(),
+            generator
+        );
+
+        if (crc == "") {
+            return false;
+        }
+
+        frames[i].storeErrorDetectionBits(crc);
+    }
+
+    return true;
 }
 
 // Apply one selected error-detection method to all frames.
@@ -72,30 +103,94 @@ bool applyErrorDetection(vector<Frame>& frames, string errorDetectionType) {
         return true;
     }
 
+    if (errorDetectionType == "CRC8" ||
+        errorDetectionType == "CRC10" ||
+        errorDetectionType == "CRC16" ||
+        errorDetectionType == "CRC32") {
+        return addCRCs(frames, errorDetectionType);
+    }
+
     cerr << "Error: unsupported error-detection type\n";
     return false;
 }
 
-// Return true only when every frame passes checksum detection.
-bool checkAllFrames(vector<Frame>& frames) {
+// Prepare complete frame copies for transmission.
+vector<string> prepareFramesForTransmission(vector<Frame>& frames) {
+    vector<string> transmittedFrames;
     int totalFrames = frames.size();
 
     for (int i = 0; i < totalFrames; i++) {
-        bool frameIsValid = detectChecksum16(
-            frames[i].getHeaderBits(),
-            frames[i].getPayloadBits(),
-            frames[i].getChecksum()
-        );
-
-        if (frameIsValid == false) {
-            return false;
-        }
+        transmittedFrames.push_back(frames[i].getCompleteFrameBits());
     }
 
-    return true;
+    return transmittedFrames;
 }
 
-// Print the payload bits stored in every frame.
+// Let the sender select one method for the complete file.
+string selectErrorDetectionType() {
+    int choice;
+
+    cout << "Select an error-detection method:\n";
+    cout << "1. Checksum-16\n";
+    cout << "2. CRC-8\n";
+    cout << "3. CRC-10\n";
+    cout << "4. CRC-16\n";
+    cout << "5. CRC-32\n";
+    cout << "Enter your choice: ";
+    cin >> choice;
+
+    if (choice == 1) {
+        return "CHECKSUM16";
+    }
+    if (choice == 2) {
+        return "CRC8";
+    }
+    if (choice == 3) {
+        return "CRC10";
+    }
+    if (choice == 4) {
+        return "CRC16";
+    }
+    if (choice == 5) {
+        return "CRC32";
+    }
+
+    return "";
+}
+
+// Let the sender select how transmission errors will be injected.
+string selectErrorInjectionType() {
+    int choice;
+
+    cout << "Select an error-injection method:\n";
+    cout << "1. No error\n";
+    cout << "2. Single-bit error\n";
+    cout << "3. Two isolated single-bit errors\n";
+    cout << "4. Odd number of errors\n";
+    cout << "5. Burst error\n";
+    cout << "Enter your choice: ";
+    cin >> choice;
+
+    if (choice == 1) {
+        return "NO_ERROR";
+    }
+    if (choice == 2) {
+        return "SINGLE_BIT";
+    }
+    if (choice == 3) {
+        return "TWO_ISOLATED_BITS";
+    }
+    if (choice == 4) {
+        return "ODD_NUMBER_OF_BITS";
+    }
+    if (choice == 5) {
+        return "BURST_ERROR";
+    }
+
+    return "";
+}
+
+// Print the type, payload, and trailer of every frame.
 void printFrames(vector<Frame>& frames) {
     int totalFrames = frames.size();
 
@@ -103,7 +198,7 @@ void printFrames(vector<Frame>& frames) {
         cout << "Frame " << i + 1 << '\n';
         cout << "Type: " << frames[i].getErrorDetectionType() << '\n';
         cout << "Payload: " << frames[i].getPayloadBits() << '\n';
-        cout << "Trailer: " << frames[i].getChecksum() << '\n';
+        cout << "Trailer: " << frames[i].getErrorDetectionBits() << '\n';
     }
 }
 
@@ -142,7 +237,12 @@ int main(int argc, char* argv[]) {
     }
 
     // Select one error-detection type for the complete file.
-    string errorDetectionType = "CHECKSUM16";
+    string errorDetectionType = selectErrorDetectionType();
+
+    if (errorDetectionType == "") {
+        cerr << "Error: invalid selection\n";
+        return 1;
+    }
 
     // Create frames from the generated bit file.
     vector<Frame> frames;
@@ -155,16 +255,34 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // No errors are injected yet, so all frames should be valid.
-    bool checksumResult = checkAllFrames(frames);
+    // Create copies of the complete frames for transmission.
+    vector<string> transmittedFrames = prepareFramesForTransmission(frames);
+
+    // Select and apply one error-injection method.
+    string injectionType = selectErrorInjectionType();
+
+    if (injectionType == "") {
+        cerr << "Error: invalid error-injection selection\n";
+        return 1;
+    }
+
+    if (!applyErrorInjection(transmittedFrames, injectionType)) {
+        cerr << "Error: error injection failed\n";
+        return 1;
+    }
+
+    // Send the transmitted frame copies to the receiver.
+    bool detectionResult = receiveFrames(transmittedFrames);
 
     cout << "Total frames created: " << frames.size() << '\n';
+    cout << "Error detection: " << errorDetectionType << '\n';
+    cout << "Error injection: " << injectionType << '\n';
 
-    if (checksumResult == true) {
-        cout << "Checksum detection result: true\n";
+    if (detectionResult == true) {
+        cout << "Receiver result: true (no error detected)\n";
     }
     else {
-        cout << "Checksum detection result: false\n";
+        cout << "Receiver result: false (error detected)\n";
     }
 
     // printFrames(frames);
