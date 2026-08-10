@@ -201,32 +201,29 @@ void printFrames(vector<Frame>& frames) {
     }
 }
 
-// argc stores the number of command-line arguments.
-// argv stores the arguments as strings.
+
 int main(int argc, char* argv[]) {
-    // Check whether the input filename was provided.
+
     if (argc < 2) {
         cerr << "Usage: " << argv[0];
         cerr << " <input_file> [receiver_address] [port]\n";
         return 1;
     }
 
-    // Open the file in normal text mode.
-    ifstream inputFile(argv[1]);
+    ifstream inputFile(argv[1]);//open in character mode
 
-    // Stop if the file cannot be opened.
+   
     if (!inputFile.is_open()) {
         cerr << "Error: could not open input file: " << argv[1] << '\n';
         return 1;
     }
 
-    // Store the file contents one line at a time.
-    vector<string> fileLines;
+    
+    vector<string> fileLines;//will store it line by line
     string line;
 
     while (getline(inputFile, line)) {
-        // getline removes '\n', so add it manually.
-        line += '\n';
+        line += '\n';//getline removes the newline ,so adding newline at end
 
         fileLines.push_back(line);
     }
@@ -244,7 +241,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Create frames from the generated bit file.
+    //Store Frames in a vector
     vector<Frame> frames;
     if (!createFrames("contentBIts.txt", frames, errorDetectionType)) {
         return 1;
@@ -255,10 +252,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Create copies of the complete frames for transmission.
+    // complete frames are transmitted at once
     vector<string> transmittedFrames = prepareFramesForTransmission(frames);
 
-    // Select and apply one error-injection method.
+    // for one error injection method is applied to all
     string injectionType = selectErrorInjectionType();
 
     if (injectionType == "") {
