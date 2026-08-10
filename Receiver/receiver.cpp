@@ -82,13 +82,11 @@ bool receiveFrames(vector<string>& receivedFrames) {
         }
 
         if (errorDetectionType == "CHECKSUM16") {
-            frameIsValid = detectChecksum16(
-                headerBits, payloadBits, trailerBits
-            );
+            frameIsValid = detectChecksum16(payloadBits, trailerBits);
         }
         else {
             frameIsValid = detectCRC(
-                headerBits, payloadBits, trailerBits, generator
+                payloadBits, trailerBits, generator
             );
         }
 

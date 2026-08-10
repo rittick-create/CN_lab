@@ -3,8 +3,7 @@
 using namespace std;
 
 // Return true when the received CRC remainder is zero.
-bool detectCRC(string headerBits, string payloadBits,
-               string receivedCRC, string generator) {
+bool detectCRC(string payloadBits, string receivedCRC, string generator) {
     int generatorLength = generator.length();
 
     if (generatorLength < 2) {
@@ -19,7 +18,7 @@ bool detectCRC(string headerBits, string payloadBits,
         return false;
     }
 
-    string receivedData = headerBits + payloadBits + receivedCRC;
+    string receivedData = payloadBits + receivedCRC;
     int receivedLength = receivedData.length();
 
     // Reject anything other than binary digits.
@@ -29,7 +28,7 @@ bool detectCRC(string headerBits, string payloadBits,
         }
     }
 
-    // Divide the complete received frame using XOR.
+    // Divide the received payload-and-CRC codeword using XOR.
     for (int position = 0;
          position <= receivedLength - generatorLength;
          position++) {

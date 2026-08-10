@@ -17,8 +17,8 @@ int checksumWordToNumber(string word) {
     return number;
 }
 
-// Generate a 16-bit checksum from the header and payload.
-string generateChecksum16(string headerBits, string payloadBits) {
+// Generate a 16-bit checksum from the payload only.
+string generateChecksum16(string payloadBits) {
     // Complete the 384-bit payload with zero padding.
     while (payloadBits.length() < PAYLOAD_SIZE_BITS) {
         payloadBits += '0';
@@ -28,7 +28,7 @@ string generateChecksum16(string headerBits, string payloadBits) {
         payloadBits = payloadBits.substr(0, PAYLOAD_SIZE_BITS);
     }
 
-    string dataword = headerBits + payloadBits;
+    string dataword = payloadBits;
 
     // Make the dataword length divisible by 16.
     while (dataword.length() % 16 != 0) {

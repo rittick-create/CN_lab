@@ -18,8 +18,7 @@ int receivedWordToNumber(string word) {
 }
 
 // Return true when the received checksum is valid.
-bool detectChecksum16(string headerBits, string payloadBits,
-                      string receivedChecksum) {
+bool detectChecksum16(string payloadBits, string receivedChecksum) {
     if (receivedChecksum.length() != 16) {
         return false;
     }
@@ -33,7 +32,7 @@ bool detectChecksum16(string headerBits, string payloadBits,
         payloadBits = payloadBits.substr(0, PAYLOAD_SIZE_BITS);
     }
 
-    string receivedData = headerBits + payloadBits;
+    string receivedData = payloadBits;
 
     // Use the same temporary padding used during generation.
     while (receivedData.length() % 16 != 0) {

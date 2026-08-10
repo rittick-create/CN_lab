@@ -3,7 +3,7 @@ Sender side + extra things
 
 The sender receives the input filename from the command line.
 
-The file is converted into a binary dataword.
+The file is converted into bits and divided into 48-byte payloads.
 
 We will be using Ethernet IEEE 802.3 standard frame
 
@@ -13,7 +13,7 @@ We will be using Ethernet IEEE 802.3 standard frame
 <.                      Header                                >< payload>< Trailer >
 
 
-Then redundant checksum or CRC bits are added to the codeword.
+Then checksum or CRC bits are generated from each payload and added as its trailer.
 
 After that, the selected random error-injection technique is applied.
 
@@ -23,7 +23,7 @@ The complete frame is then sent to the receiver.
 
 Receiver side (mainly error detection)
 Receiver will check if there is any error detected. Based on the detection it will accept
-or reject the dataword.
+or reject the received codeword.
 
 ------------------------------------------------------------------------------------------------------------
 
@@ -163,6 +163,16 @@ The complete frame transmitted through the socket is:
 128-bit Header + 384-bit Payload + variable-length Trailer
 ```
 
+For error detection, this project uses:
+
+```text
+Dataword = Payload
+Codeword = Payload + Trailer
+Complete frame = Header + Codeword
+```
+
+The header is transmitted with the codeword, but it is not included in checksum or CRC generation.
+
 ##  Selecting the error-detection method
 
 The sender displays this menu:
@@ -185,14 +195,14 @@ The selected method is applied independently to every frame, but the same method
 The steps are:
 
 1. Finish the 384-bit payload by adding padding if necessary.
-2. Combine the header and payload.
-3. Divide the combined data into 16-bit words.
+2. Use the payload as the dataword.
+3. Divide the payload into 16-bit words.
 4. Add all 16-bit words.
 5. If a carry goes beyond 16 bits, wrap it around and add it to the right side.
 6. Invert every bit of the final 16-bit sum.
 7. Store the resulting 16 bits in the frame trailer.
 
-`ErrorDetection/Checksum/ChecksumDetection.cpp` performs receiver-side checking. It adds the header, payload, and received checksum. A correct frame produces sixteen `1` bits after one's-complement addition.
+`ErrorDetection/Checksum/ChecksumDetection.cpp` performs receiver-side checking. It adds the payload and received checksum. A correct codeword produces sixteen `1` bits after one's-complement addition.
 
 The detection function returns:
 
@@ -214,17 +224,17 @@ false -> an error is detected
 
 CRC generation works as follows:
 
-1. Combine the 128-bit header and 384-bit payload.
+1. Use the 384-bit payload as the dataword.
 2. Let the CRC size be `N` bits.
-3. Append `N` zeros to the combined data.
+3. Append `N` zeros to the payload.
 4. Divide by the selected generator using XOR instead of normal subtraction.
 5. Take the final `N`-bit remainder.
 6. Store that remainder in the trailer.
 
 `ErrorDetection/CRC/CRCDetection.cpp` checks a received CRC frame:
 
-1. Combine the received header, payload, and CRC trailer.
-2. Divide the complete received frame by the same generator.
+1. Combine the received payload and CRC trailer.
+2. Divide the received codeword by the same generator.
 3. Check the remainder.
 
 The function returns `true` only when every remainder bit is zero.
@@ -256,7 +266,7 @@ Select an error-injection method:
 | Odd number of errors | Flips three separated bits |
 | Burst error | Flips eight consecutive bits |
 
-The selected injection method is applied to every transmitted frame. A single-bit error may use any position. The multi-bit patterns use a randomly selected complete 16-bit region, which can be in the header, payload, or a complete trailer region.
+The selected injection method is applied to every transmitted frame. Errors are restricted to the protected codeword region, which is the payload plus trailer. The header is not modified by the current injection functions.
 
 ##  Receiver processing
 
@@ -266,7 +276,7 @@ The selected injection method is applied to every transmitted frame. A single-bi
 2. Read the next 384 bits as the payload.
 3. Treat all remaining bits as the trailer.
 4. Read the final 16 header bits to determine the error-detection type.
-5. Call either checksum detection or generic CRC detection.
+5. Call either checksum detection or generic CRC detection using only the payload and trailer.
 6. Stop and return `false` if any frame fails.
 7. Return `true` only when every received frame passes.
 
@@ -485,7 +495,7 @@ After connecting, the sender uses `boost::asio::write()` to send:
 frame count -> newline -> frame 1 -> newline -> frame 2 -> newline -> ...
 ```
 
-The receiver uses `boost::asio::read_until()` to separate these values at each newline. It checks the header, payload, and trailer of every frame. Finally, it writes `true\n` or `false\n` back through the same TCP connection.
+The receiver uses `boost::asio::read_until()` to separate these values at each newline. It reads the detection type from the header and checks the payload-plus-trailer codeword of every frame. Finally, it writes `true\n` or `false\n` back through the same TCP connection.
 
 ```text
 receiver_app                         sender_app
@@ -502,5 +512,3 @@ receiver_app                         sender_app
 ```
 
 Boost.Asio manages the operating-system socket operations, while the project-defined newline protocol explains where one frame ends and the next frame begins inside TCP's continuous byte stream.
-
-

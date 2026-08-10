@@ -59,10 +59,7 @@ void addChecksums(vector<Frame>& frames) {
     int totalFrames = frames.size();
 
     for (int i = 0; i < totalFrames; i++) {
-        string checksum = generateChecksum16(
-            frames[i].getHeaderBits(),
-            frames[i].getPayloadBits()
-        );
+        string checksum = generateChecksum16(frames[i].getPayloadBits());
 
         frames[i].storeErrorDetectionBits(checksum);
     }
@@ -80,7 +77,6 @@ bool addCRCs(vector<Frame>& frames, string errorDetectionType) {
 
     for (int i = 0; i < totalFrames; i++) {
         string crc = generateCRC(
-            frames[i].getHeaderBits(),
             frames[i].getPayloadBits(),
             generator
         );

@@ -24,7 +24,7 @@ string getCRCGenerator(string errorDetectionType) {
 }
 
 // Generate CRC bits using modulo-2 division.
-string generateCRC(string headerBits, string payloadBits, string generator) {
+string generateCRC(string payloadBits, string generator) {
     // Complete the payload before calculating the CRC.
     while (payloadBits.length() < PAYLOAD_SIZE_BITS) {
         payloadBits += '0';
@@ -41,7 +41,7 @@ string generateCRC(string headerBits, string payloadBits, string generator) {
     }
 
     int crcLength = generatorLength - 1;
-    string dividend = headerBits + payloadBits;
+    string dividend = payloadBits;
 
     // Append zeros equal to the required CRC length.
     for (int i = 0; i < crcLength; i++) {
@@ -50,7 +50,7 @@ string generateCRC(string headerBits, string payloadBits, string generator) {
 
     int dividendLength = dividend.length();
 
-    // Perform binary division using XOR.
+    // binary division using XOR.
     for (int position = 0;
          position <= dividendLength - generatorLength;
          position++) {

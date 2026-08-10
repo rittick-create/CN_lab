@@ -15,28 +15,30 @@ void flipBit(string& frameBits, int position) {
     }
 }
 
-// Flip one random bit.
+// Flip one random bit in the protected payload-and-trailer region.
 bool injectSingleBitError(string& frameBits) {
     int frameLength = frameBits.length();
+    int protectedLength = frameLength - HEADER_SIZE;
 
-    if (frameLength == 0) {
+    if (protectedLength <= 0) {
         return false;
     }
 
-    int position = rand() % frameLength;
+    int position = HEADER_SIZE + (rand() % protectedLength);
     flipBit(frameBits, position);
     return true;
 }
 
 // Flip two bits with one unchanged bit between them.
 bool injectTwoIsolatedBitErrors(string& frameBits) {
-    int completeWords = frameBits.length() / 16;
+    int protectedLength = frameBits.length() - HEADER_SIZE;
+    int completeWords = protectedLength / 16;
 
     if (completeWords == 0) {
         return false;
     }
 
-    int wordStart = (rand() % completeWords) * 16;
+    int wordStart = HEADER_SIZE + (rand() % completeWords) * 16;
     int firstPosition = wordStart + (rand() % 14);
     int secondPosition = firstPosition + 2;
 
@@ -47,13 +49,14 @@ bool injectTwoIsolatedBitErrors(string& frameBits) {
 
 // Flip three separated bits, which is an odd number of errors.
 bool injectOddNumberOfErrors(string& frameBits) {
-    int completeWords = frameBits.length() / 16;
+    int protectedLength = frameBits.length() - HEADER_SIZE;
+    int completeWords = protectedLength / 16;
 
     if (completeWords == 0) {
         return false;
     }
 
-    int wordStart = (rand() % completeWords) * 16;
+    int wordStart = HEADER_SIZE + (rand() % completeWords) * 16;
     int firstPosition = wordStart + (rand() % 12);
 
     flipBit(frameBits, firstPosition);
@@ -64,13 +67,14 @@ bool injectOddNumberOfErrors(string& frameBits) {
 
 // Flip eight consecutive bits inside one 16-bit word.
 bool injectBurstError(string& frameBits) {
-    int completeWords = frameBits.length() / 16;
+    int protectedLength = frameBits.length() - HEADER_SIZE;
+    int completeWords = protectedLength / 16;
 
     if (completeWords == 0) {
         return false;
     }
 
-    int wordStart = (rand() % completeWords) * 16;
+    int wordStart = HEADER_SIZE + (rand() % completeWords) * 16;
     int burstStart = wordStart + (rand() % 9);
 
     for (int i = 0; i < 8; i++) {
