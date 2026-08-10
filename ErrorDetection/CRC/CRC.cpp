@@ -26,12 +26,12 @@ string getCRCGenerator(string errorDetectionType) {
 // Generate CRC bits using modulo-2 division.
 string generateCRC(string headerBits, string payloadBits, string generator) {
     // Complete the payload before calculating the CRC.
-    while (payloadBits.length() < 48) {
+    while (payloadBits.length() < PAYLOAD_SIZE_BITS) {
         payloadBits += '0';
     }
 
-    if (payloadBits.length() > 48) {
-        payloadBits = payloadBits.substr(0, 48);
+    if (payloadBits.length() > PAYLOAD_SIZE_BITS) {
+        payloadBits = payloadBits.substr(0, PAYLOAD_SIZE_BITS);
     }
 
     int generatorLength = generator.length();

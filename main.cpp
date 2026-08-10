@@ -5,11 +5,9 @@
 #include "CommonFunctions/StringtoBinary.cpp"
 #include "Sender/Frame.cpp"
 #include "ErrorDetection/Checksum/Checksum.cpp"
-#include "ErrorDetection/Checksum/ChecksumDetection.cpp"
 #include "ErrorDetection/CRC/CRC.cpp"
-#include "ErrorDetection/CRC/CRCDetection.cpp"
 #include "Sender/ErrorInjection/errorInjection.cpp"
-#include "Receiver/receiver.cpp"
+#include "Sender/socketSender.cpp"
 
 using namespace std;
 
@@ -45,8 +43,9 @@ bool createFrames(string bitsFileName, vector<Frame>& frames,
     bitsFile >> contentBits;
     int totalBits = contentBits.length();
 
-    for (int position = 0; position < totalBits; position += PAYLOAD_SIZE) {
-        string payloadBits = contentBits.substr(position, PAYLOAD_SIZE);
+    for (int position = 0; position < totalBits;
+         position += PAYLOAD_SIZE_BITS) {
+        string payloadBits = contentBits.substr(position, PAYLOAD_SIZE_BITS);
 
         // Every frame receives the same error-detection type.
         frames.push_back(Frame(payloadBits, errorDetectionType));
@@ -207,7 +206,8 @@ void printFrames(vector<Frame>& frames) {
 int main(int argc, char* argv[]) {
     // Check whether the input filename was provided.
     if (argc < 2) {
-        cerr << "Usage: " << argv[0] << " <input_file>\n";
+        cerr << "Usage: " << argv[0];
+        cerr << " <input_file> [receiver_address] [port]\n";
         return 1;
     }
 
@@ -271,8 +271,29 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Send the transmitted frame copies to the receiver.
-    bool detectionResult = receiveFrames(transmittedFrames);
+    // Use localhost and port 8080 unless other values are provided.
+    string receiverAddress = "127.0.0.1";
+    string receiverPort = "8080";
+
+    if (argc >= 3) {
+        receiverAddress = argv[2];
+    }
+    if (argc >= 4) {
+        receiverPort = argv[3];
+    }
+
+    // Send the frame copies through a TCP socket.
+    bool detectionResult = false;
+    bool transmissionWorked = sendFramesToReceiver(
+        transmittedFrames,
+        receiverAddress,
+        receiverPort,
+        detectionResult
+    );
+
+    if (transmissionWorked == false) {
+        return 1;
+    }
 
     cout << "Total frames created: " << frames.size() << '\n';
     cout << "Error detection: " << errorDetectionType << '\n';

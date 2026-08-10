@@ -14,7 +14,7 @@ bool detectCRC(string headerBits, string payloadBits,
     int crcLength = generatorLength - 1;
     int receivedCRCLength = receivedCRC.length();
 
-    if (payloadBits.length() != 48 ||
+    if (payloadBits.length() != PAYLOAD_SIZE_BITS ||
         receivedCRCLength != crcLength) {
         return false;
     }

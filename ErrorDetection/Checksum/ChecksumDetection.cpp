@@ -24,13 +24,13 @@ bool detectChecksum16(string headerBits, string payloadBits,
         return false;
     }
 
-    // Complete the 48-bit payload with zero padding.
-    while (payloadBits.length() < 48) {
+    // Complete the 384-bit payload with zero padding.
+    while (payloadBits.length() < PAYLOAD_SIZE_BITS) {
         payloadBits += '0';
     }
 
-    if (payloadBits.length() > 48) {
-        payloadBits = payloadBits.substr(0, 48);
+    if (payloadBits.length() > PAYLOAD_SIZE_BITS) {
+        payloadBits = payloadBits.substr(0, PAYLOAD_SIZE_BITS);
     }
 
     string receivedData = headerBits + payloadBits;

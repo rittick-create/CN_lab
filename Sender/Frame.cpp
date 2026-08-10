@@ -2,8 +2,9 @@
 
 using namespace std;
 
-// Every frame can store 48 payload bits.
-const int PAYLOAD_SIZE = 48;
+// Every frame can store 48 payload bytes (384 bits).
+const int PAYLOAD_SIZE_BYTES = 48;
+const int PAYLOAD_SIZE_BITS = PAYLOAD_SIZE_BYTES * 8;
 const int HEADER_SIZE = 128;
 
 // Convert a number into a fixed number of bits.
@@ -30,7 +31,7 @@ private:
     // Temporary MAC addresses until MAC generation is added.
     const long long sourceMac = 123456789012;
     const long long destinationMac = 210987654321;
-    const int payloadLength = PAYLOAD_SIZE;
+    const int payloadLength = PAYLOAD_SIZE_BYTES;
     string errorDetectionType;
 
 public:
@@ -79,14 +80,14 @@ private:
     string bits;
 
 public:
-    // Store exactly 48 bits and add zero padding when needed.
+    // Store exactly 384 bits and add zero padding when needed.
     void storeBits(string payloadBits) {
-        if (payloadBits.length() > PAYLOAD_SIZE) {
-            payloadBits = payloadBits.substr(0, PAYLOAD_SIZE);
+        if (payloadBits.length() > PAYLOAD_SIZE_BITS) {
+            payloadBits = payloadBits.substr(0, PAYLOAD_SIZE_BITS);
         }
 
-        // Add one zero at a time until 48 bits are stored.
-        while (payloadBits.length() < PAYLOAD_SIZE) {
+        // Add one zero at a time until 384 bits are stored.
+        while (payloadBits.length() < PAYLOAD_SIZE_BITS) {
             payloadBits += '0';
         }
 
