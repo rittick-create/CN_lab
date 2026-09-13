@@ -1,0 +1,3 @@
+Computer networks use flow control so that a fast sender does not overwhelm a receiver.
+This file is divided into 46-byte payloads and transmitted with Stop-and-Wait,
+Go-Back-N, or Selective Repeat ARQ. CRC-32 protects every data frame.

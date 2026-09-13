@@ -1,0 +1,13 @@
+.DS_Store
+.vscode/
+__pycache__/
+*.pyc
+*.o
+a.out
+sender_app
+receiver_app
+main
+tmp/
+output/
+received_output.txt
+Evaluation/results.csv
