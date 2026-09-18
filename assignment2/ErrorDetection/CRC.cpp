@@ -16,12 +16,9 @@ string divideByGenerator(string dividend, string generator) {
          position++) {
         if (dividend[position] == '1') {
             for (int i = 0; i < generatorLength; i++) {
-                if (dividend[position + i] == generator[i]) {
-                    dividend[position + i] = '0';
-                }
-                else {
-                    dividend[position + i] = '1';
-                }
+                // XOR: equal bits give 0; different bits give 1.
+                dividend[position + i] =
+                    dividend[position + i] == generator[i] ? '0' : '1';
             }
         }
     }
@@ -31,24 +28,10 @@ string divideByGenerator(string dividend, string generator) {
 
 // Generate the 32-bit FCS for a frame's header and payload.
 string generateCRC32(string protectedBits) {
-    string dividend = protectedBits;
-
-    for (int i = 0; i < 32; i++) {
-        dividend += '0';
-    }
-
-    return divideByGenerator(dividend, CRC32_GENERATOR);
+    return divideByGenerator(protectedBits + string(32, '0'), CRC32_GENERATOR);
 }
 
 // A correct codeword gives an all-zero remainder.
 bool detectCRC32(string codeword) {
-    string remainder = divideByGenerator(codeword, CRC32_GENERATOR);
-
-    for (int i = 0; i < (int)remainder.length(); i++) {
-        if (remainder[i] != '0') {
-            return false;
-        }
-    }
-
-    return true;
+    return divideByGenerator(codeword, CRC32_GENERATOR) == string(32, '0');
 }

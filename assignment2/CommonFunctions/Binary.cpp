@@ -2,41 +2,22 @@
 
 using namespace std;
 
-// Convert every byte in a string into eight binary digits.
-string textToBits(string text) {
-    string bits = "";
-
-    for (int i = 0; i < (int)text.length(); i++) {
-        unsigned char character = text[i];
-
-        for (int bit = 7; bit >= 0; bit--) {
-            if ((character >> bit) & 1) {
-                bits += '1';
-            }
-            else {
-                bits += '0';
-            }
-        }
+// Convert a non-negative number into a fixed number of bits.
+string numberToBits(int number, int totalBits) {
+    string bits(totalBits, '0');
+    for (int i = totalBits - 1; i >= 0; i--) {
+        bits[i] = '0' + number % 2;
+        number /= 2;
     }
-
     return bits;
 }
 
-// Convert a non-negative number into a fixed number of bits.
-string numberToBits(int number, int totalBits) {
-    string bits = "";
-
-    for (int i = 0; i < totalBits; i++) {
-        if (number % 2 == 0) {
-            bits = '0' + bits;
-        }
-        else {
-            bits = '1' + bits;
-        }
-
-        number = number / 2;
+// Each byte is just a number represented by eight bits.
+string textToBits(string text) {
+    string bits;
+    for (unsigned char character : text) {
+        bits += numberToBits(character, 8);
     }
-
     return bits;
 }
 
@@ -44,15 +25,11 @@ string numberToBits(int number, int totalBits) {
 int bitsToNumber(string bits) {
     int number = 0;
 
-    for (int i = 0; i < (int)bits.length(); i++) {
-        number = number * 2;
-
-        if (bits[i] == '1') {
-            number++;
-        }
-        else if (bits[i] != '0') {
+    for (char bit : bits) {
+        if (bit != '0' && bit != '1') {
             return -1;
         }
+        number = number * 2 + (bit - '0');
     }
 
     return number;
@@ -62,9 +39,7 @@ int bitsToNumber(string bits) {
 string bitsToText(string bits) {
     string text = "";
 
-    for (int position = 0;
-         position + 8 <= (int)bits.length();
-         position += 8) {
+    for (int position = 0; position + 8 <= (int)bits.length(); position += 8) {
         int value = bitsToNumber(bits.substr(position, 8));
         text += (char)value;
     }

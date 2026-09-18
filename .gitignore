@@ -10,4 +10,5 @@ main
 tmp/
 output/
 received_output.txt
+received_ouptut.txt
 Evaluation/results.csv

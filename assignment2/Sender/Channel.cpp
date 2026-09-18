@@ -13,16 +13,9 @@ private:
     uniform_real_distribution<double> probability;
 
 public:
-    int droppedFrames;
-    int corruptedFrames;
-    int delayedFrames;
-
-    DataChannel(double selectedProbability, int seed)
-        : randomGenerator(seed), probability(0.0, 1.0) {
+    DataChannel(double selectedProbability)
+        : randomGenerator(random_device{}()), probability(0.0, 1.0) {
         errorProbability = selectedProbability;
-        droppedFrames = 0;
-        corruptedFrames = 0;
-        delayedFrames = 0;
     }
 
     // Return false when the frame does not reach the receiver.
@@ -37,30 +30,21 @@ public:
 
         int impairment = randomGenerator() % 3;
 
-        if (impairment == 0) {
-            droppedFrames++;
+        if (impairment == 0) {//drop the frame
             return false;
         }
 
-        if (impairment == 1) {
+        if (impairment == 1) {//corrupt
             int position = randomGenerator() % frameBits.length();
 
-            if (frameBits[position] == '0') {
-                frameBits[position] = '1';
-            }
-            else {
-                frameBits[position] = '0';
-            }
-
-            corruptedFrames++;
+            frameBits[position] = frameBits[position] == '0' ? '1' : '0';
             return true;
         }
 
         // A frame delayed beyond its deadline is treated as lost in transit.
-        this_thread::sleep_for(
+        this_thread::sleep_for(//excessive delay
             chrono::milliseconds(timeoutMilliseconds + 20)
         );
-        delayedFrames++;
         return false;
     }
 };

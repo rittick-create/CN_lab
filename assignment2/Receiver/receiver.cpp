@@ -2,12 +2,10 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
-#include <map>
 #include <random>
 #include <sstream>
 #include <string>
 #include <thread>
-#include <vector>
 #include "../Sender/Frame.cpp"
 #include "../CommonFunctions/SocketConnection.cpp"
 
@@ -18,18 +16,15 @@ class ReceiverProgram {
 private:
     SocketConnection& connection;
     string protocol;
-    int windowSize;
     double errorProbability;
     mt19937 randomGenerator;
     uniform_real_distribution<double> probability;
     int expectedSequence;
-    int receiveBase;
-    map<int, string> selectiveBuffer;
-    vector<string> acceptedPayloads;
+    string receivedData;
 
     // Store payloads in delivery order.
     void acceptPayload(string payload) {
-        acceptedPayloads.push_back(payload);
+        receivedData += payload;
     }
 
     void receiveStopAndWait(int sequenceNumber, string payload) {
@@ -54,40 +49,20 @@ private:
         Send(expectedSequence - 1);
     }
 
-    void receiveSelectiveRepeat(int sequenceNumber, string payload) {
-        if (sequenceNumber >= receiveBase &&
-            sequenceNumber < receiveBase + windowSize) {
-            if (selectiveBuffer.count(sequenceNumber) == 0) {
-                selectiveBuffer[sequenceNumber] = payload;
-            }
-
-            // Independent acknowledgement, even for out-of-order frames.
-            Send(sequenceNumber);
-
-            while (selectiveBuffer.count(receiveBase) == 1) {
-                acceptPayload(selectiveBuffer[receiveBase]);
-                selectiveBuffer.erase(receiveBase);
-                receiveBase++;
-            }
-        }
-        else if (sequenceNumber < receiveBase) {
-            Send(sequenceNumber);
-        }
+    // ACK-only demonstration: CRC was checked by Recv().
+    void receiveSelectiveRepeat(int sequenceNumber) {
+        Send(sequenceNumber);
     }
 
 public:
     ReceiverProgram(SocketConnection& selectedConnection,
                     string selectedProtocol,
-                    int selectedWindow,
-                    double selectedProbability,
-                    int seed)
+                    double selectedProbability)
         : connection(selectedConnection),
-          randomGenerator(seed), probability(0.0, 1.0) {
+          randomGenerator(random_device{}()), probability(0.0, 1.0) {
         protocol = selectedProtocol;
-        windowSize = selectedWindow;
         errorProbability = selectedProbability;
         expectedSequence = 0;
-        receiveBase = 0;
     }
 
     // Check(): reject malformed or CRC-corrupted data frames.
@@ -114,7 +89,7 @@ public:
             receiveGoBackN(sequenceNumber, payload);
         }
         else {
-            receiveSelectiveRepeat(sequenceNumber, payload);
+            receiveSelectiveRepeat(sequenceNumber);
         }
     }
 
@@ -146,7 +121,9 @@ public:
             this_thread::sleep_for(chrono::milliseconds(450));
         }
 
-        connection.sendLine("ACK " + to_string(ackNumber));
+        // The receiver creates the ACK text here and sends it to the sender.
+        string message = "ACK " + to_string(ackNumber);
+        connection.sendLine(message);
     }
 
     bool writeOutput(string outputFileName) {
@@ -156,13 +133,8 @@ public:
             return false;
         }
 
-        for (int i = 0; i < (int)acceptedPayloads.size(); i++) {
-            outputFile.write(
-                acceptedPayloads[i].data(), acceptedPayloads[i].size()
-            );
-        }
-
-        return true;
+        outputFile.write(receivedData.data(), receivedData.size());
+        return !outputFile.fail();
     }
 };
 
@@ -200,9 +172,8 @@ int main(int argc, char* argv[]) {
         string protocol;
         int windowSize;
         double errorProbability;
-        int seed;
         startInput >> messageType >> protocol >> windowSize;
-        startInput >> errorProbability >> seed;
+        startInput >> errorProbability;
 
         if (messageType != "START" || startInput.fail()) {
             cerr << "Error: invalid START message\n";
@@ -210,9 +181,10 @@ int main(int argc, char* argv[]) {
         }
 
         ReceiverProgram receiver(
-            connection, protocol, windowSize, errorProbability, seed
+            connection, protocol, errorProbability
         );
 
+        // After START, each message is either DATA or END.
         while (connection.receiveLine(line, 30000)) {
             if (line == "END") {
                 if (!receiver.writeOutput(outputFileName)) {
@@ -224,7 +196,7 @@ int main(int argc, char* argv[]) {
                 return 0;
             }
 
-            if (line.rfind("DATA ", 0) == 0) {
+            if (line.substr(0, 5) == "DATA ") {
                 receiver.Recv(line.substr(5));
             }
         }

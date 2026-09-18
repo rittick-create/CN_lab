@@ -21,21 +21,18 @@ private:
     DataChannel channel;
     vector<Frame> frames;
     vector<int> attempts;
-    double estimatedRTT;
-    double rttDeviation;
-    int timeoutMilliseconds;
+    double estimatedRTT;//smooth avg of how long a frame's ack might arrive
+    double rttDeviation;//actuall rtt differ from that estimate
+    int timeoutMilliseconds;//how long the sender allows an unaack frame to wait before retransmitt
     int windowSize;
     string protocol;
-    int transmissions;
-    int retransmissions;
+    int transmissions;//total attempts
     int timeouts;
-    vector<double> rttSamples;
 
     // Send one frame through the simulated channel and then the TCP socket.
     //return false if the frame exceeds 100 transmission attempts.
     //returns true if the freame is sent successfully or if it is dropped, corrupted, or delayed.
-    bool transmitFrame(int frameNumber,
-                       chrono::steady_clock::time_point& sentAt) {
+    bool transmitFrame(int frameNumber,chrono::steady_clock::time_point& sentAt) {
         if (attempts[frameNumber] >= 100) {//if frame reached 100 attempths then print error and return false
             cerr << "Error: frame " << frameNumber;
             cerr << " exceeded 100 transmission attempts\n";
@@ -46,13 +43,8 @@ private:
         attempts[frameNumber]++;//update the attempts for the frame
         transmissions++;
 
-        if (isRetransmission) {
-            retransmissions++;
-        }
-        //frame is a vector ,so this one gets the bits of the whole frame of a particular frame number
-        string transmittedBits =
-            frames[frameNumber].getCompleteFrameBits();
-        //record the time when the frame is sent    
+        string transmittedBits =frames[frameNumber].getCompleteFrameBits();//gets the bits of the whole frame of a particular frame number
+        //record the time when the frame is sent
         sentAt = chrono::steady_clock::now();
         //send the frame through the simulated channel and check if it reaches the receiver
         bool reachesReceiver = channel.Channel(
@@ -66,12 +58,12 @@ private:
             return true;
         }
 
+        // The sender creates DATA messages; sendLine just writes the text.
         return connection.sendLine("DATA " + transmittedBits);
     }
+
     //how much time is left before the timeout expires
-    int millisecondsRemaining(
-        chrono::steady_clock::time_point started,
-        int allowedMilliseconds) {
+    int millisecondsRemaining(chrono::steady_clock::time_point started,int allowedMilliseconds) {
         long elapsed = chrono::duration_cast<chrono::milliseconds>(
             chrono::steady_clock::now() - started
         ).count();
@@ -89,9 +81,7 @@ private:
     //while time ramins=>wait fro an ack=>check if the ack is for the frame=>if yes then break and go to the next frame
     //if not acknowledged=>increment the timeouts and print timeout for the frame
     bool runStopAndWait() {
-        for (int frameNumber = 0;
-             frameNumber < (int)frames.size();
-             frameNumber++) {
+        for (int frameNumber = 0;frameNumber < (int)frames.size();frameNumber++) {
             bool acknowledged = false;
 
             while (!acknowledged) {
@@ -101,9 +91,7 @@ private:
                     return false;//frame exeeded 100 attempts or socket failed
                 }
 
-                while (millisecondsRemaining(
-                           sentAt, timeoutMilliseconds
-                       ) > 0) {
+                while (millisecondsRemaining(sentAt, timeoutMilliseconds) > 0) {
                     int ackNumber = -1;
                     int waitTime = millisecondsRemaining(
                         sentAt, timeoutMilliseconds
@@ -197,7 +185,7 @@ private:
     //check every fram  fro timeout
     //retransmitt only the timeout ones
     //move the window forward
-    bool runSelectiveRepeat() {
+    bool runSelectiveRepeat(){
         int totalFrames = frames.size();
         int base = 0;
         vector<bool> acknowledged(totalFrames, false);
@@ -257,17 +245,15 @@ public:
     SenderProgram(SocketConnection& selectedConnection,
                   string selectedProtocol,
                   int selectedWindow,
-                  double errorProbability,
-                  int seed)
+                  double errorProbability)
         : connection(selectedConnection),
-          channel(errorProbability, seed) {
+          channel(errorProbability) {
         protocol = selectedProtocol;
         windowSize = selectedWindow;
         estimatedRTT = 200.0;
         rttDeviation = 50.0;
         timeoutMilliseconds = 400;
         transmissions = 0;
-        retransmissions = 0;
         timeouts = 0;
     }
 
@@ -280,10 +266,11 @@ public:
             return false;
         }
 
-        string contents(
-            (istreambuf_iterator<char>(inputFile)),
-            istreambuf_iterator<char>()
-        );
+        string contents;
+        char character;
+        while (inputFile.get(character)) {
+            contents += character;
+        }
 
         if (contents.empty()) {
             cerr << "Error: input file is empty\n";
@@ -307,11 +294,6 @@ public:
         return true;
     }
 
-    // Timer(): return the current adaptive timeout value.
-    int Timer() {
-        return timeoutMilliseconds;
-    }
-
     // Timeout(): update timeout = estimated RTT + 4 * RTT deviation.
     void Timeout(double recentRTT) {
         double error = abs(estimatedRTT - recentRTT);
@@ -319,7 +301,6 @@ public:
         rttDeviation = 0.75 * rttDeviation + 0.25 * error;
         timeoutMilliseconds = (int)(estimatedRTT + 4 * rttDeviation);
         timeoutMilliseconds = max(100, min(timeoutMilliseconds, 2000));
-        rttSamples.push_back(recentRTT);
     }
 
     // Recv(): wait for and decode one ACK packet.
@@ -333,7 +314,10 @@ public:
         istringstream input(line);
         string type;
         input >> type >> ackNumber;
-        return type == "ACK" && !input.fail();
+        if (type != "ACK" || input.fail()) {
+            return false;
+        }
+        return true;
     }
 
     // Send(): choose and run the requested flow-control scheme.
@@ -351,44 +335,11 @@ public:
         return false;
     }
 
-    void printStatistics(double totalMilliseconds) {
-        double averageRTT = 0.0;
-
-        for (int i = 0; i < (int)rttSamples.size(); i++) {
-            averageRTT += rttSamples[i];
-        }
-
-        if (!rttSamples.empty()) {
-            averageRTT = averageRTT / rttSamples.size();
-        }
-
-        double efficiency = 100.0 * frames.size() / transmissions;
-
-        cout << "\nTransmission complete\n";
-        cout << "Protocol: " << protocol << '\n';
+    void printStatistics() {
         cout << "Frames: " << frames.size() << '\n';
-        cout << "Transmissions: " << transmissions << '\n';
-        cout << "Retransmissions: " << retransmissions << '\n';
+        cout << "Attempts: " << transmissions << '\n';
+        cout << "Retries: " << transmissions - (int)frames.size() << '\n';
         cout << "Timeouts: " << timeouts << '\n';
-        cout << fixed << setprecision(2);
-        cout << "Average RTT: " << averageRTT << " ms\n";
-        cout << "Final timeout: " << timeoutMilliseconds << " ms\n";
-        cout << "Efficiency: " << efficiency << "%\n";
-        cout << "Total time: " << totalMilliseconds << " ms\n";
-
-        // Machine-readable values used by Evaluation/evaluate.py.
-        cout << "STAT protocol=" << protocol << '\n';
-        cout << "STAT frames=" << frames.size() << '\n';
-        cout << "STAT transmissions=" << transmissions << '\n';
-        cout << "STAT retransmissions=" << retransmissions << '\n';
-        cout << "STAT timeouts=" << timeouts << '\n';
-        cout << "STAT average_rtt_ms=" << averageRTT << '\n';
-        cout << "STAT final_timeout_ms=" << timeoutMilliseconds << '\n';
-        cout << "STAT efficiency_percent=" << efficiency << '\n';
-        cout << "STAT total_time_ms=" << totalMilliseconds << '\n';
-        cout << "STAT data_drops=" << channel.droppedFrames << '\n';
-        cout << "STAT data_corruptions=" << channel.corruptedFrames << '\n';
-        cout << "STAT excessive_delays=" << channel.delayedFrames << '\n';
     }
 };
 
@@ -406,10 +357,10 @@ string normalizeProtocol(string value) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 3) {
+    if (argc < 3 || argc > 7) {
         cerr << "Usage: " << argv[0];
         cerr << " <stopwait|gobackn|selective> <input_file>";
-        cerr << " [window] [probability] [address] [port] [seed]\n";
+        cerr << " [window] [probability] [address] [port]\n";
         return 1;
     }
 
@@ -419,7 +370,6 @@ int main(int argc, char* argv[]) {
     double errorProbability = argc >= 5 ? stod(argv[4]) : 0.0;
     string address = argc >= 6 ? argv[5] : "127.0.0.1";
     string port = argc >= 7 ? argv[6] : "8080";
-    int seed = argc >= 8 ? stoi(argv[7]) : 42;
 
     if (protocol == "" || windowSize < 1 || windowSize > 128 ||
         errorProbability < 0.0 || errorProbability > 1.0) {
@@ -438,10 +388,10 @@ int main(int argc, char* argv[]) {
         boost::asio::connect(socket, resolver.resolve(address, port));
         SocketConnection connection(socket);
 
+        // First tell the receiver which protocol and channel settings to use.
         string startMessage = "START " + protocol + " ";
         startMessage += to_string(windowSize) + " ";
-        startMessage += to_string(errorProbability) + " ";
-        startMessage += to_string(seed + 1000);
+        startMessage += to_string(errorProbability);
 
         if (!connection.sendLine(startMessage)) {
             cerr << "Error: could not start receiver session\n";
@@ -449,26 +399,25 @@ int main(int argc, char* argv[]) {
         }
 
         SenderProgram sender(
-            connection, protocol, windowSize, errorProbability, seed
+            connection, protocol, windowSize, errorProbability
         );
 
         if (!sender.Framing(inputFileName)) {
             return 1;
         }
 
-        chrono::steady_clock::time_point started =
-            chrono::steady_clock::now();
-
         if (!sender.Send()) {
             cerr << "Error: transmission failed\n";
             return 1;
         }
 
-        connection.sendLine("END");
-        double totalMilliseconds = chrono::duration<double, milli>(
-            chrono::steady_clock::now() - started
-        ).count();
-        sender.printStatistics(totalMilliseconds);
+        // All frames are acknowledged. Ask the receiver to save the file.
+        if (!connection.sendLine("END")) {
+            cerr << "Error: could not send END message\n";
+            return 1;
+        }
+        cout << "Transfer complete\n";
+        sender.printStatistics();
         return 0;
     }
     catch (exception& error) {

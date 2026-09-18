@@ -32,14 +32,6 @@ public:
 
     // Wait for one complete line for at most timeoutMilliseconds.
     bool receiveLine(string& line, int timeoutMilliseconds) {
-        size_t newlinePosition = pendingInput.find('\n');
-
-        if (newlinePosition != string::npos) {
-            line = pendingInput.substr(0, newlinePosition);
-            pendingInput.erase(0, newlinePosition + 1);
-            return true;
-        }
-
         boost::system::error_code error;
         socket.non_blocking(true, error);
 
@@ -47,11 +39,24 @@ public:
             return false;
         }
 
-        chrono::steady_clock::time_point deadline =
-            chrono::steady_clock::now() +
-            chrono::milliseconds(timeoutMilliseconds);
+        auto started = chrono::steady_clock::now();
 
-        while (chrono::steady_clock::now() < deadline) {
+        while (true) {
+            // Return a complete message, keeping any later messages buffered.
+            size_t newlinePosition = pendingInput.find('\n');
+            if (newlinePosition != string::npos) {
+                line = pendingInput.substr(0, newlinePosition);
+                pendingInput.erase(0, newlinePosition + 1);
+                return true;
+            }
+
+            // Stop waiting when the allowed time has passed.
+            auto elapsed = chrono::steady_clock::now() - started;
+            if (elapsed >= chrono::milliseconds(timeoutMilliseconds)) {
+                return false;
+            }
+
+            // Read whatever bytes are currently available.
             char buffer[2048];
             size_t bytesRead = socket.read_some(
                 boost::asio::buffer(buffer), error
@@ -59,13 +64,6 @@ public:
 
             if (!error) {
                 pendingInput.append(buffer, bytesRead);
-                newlinePosition = pendingInput.find('\n');
-
-                if (newlinePosition != string::npos) {
-                    line = pendingInput.substr(0, newlinePosition);
-                    pendingInput.erase(0, newlinePosition + 1);
-                    return true;
-                }
             }
             else if (error == boost::asio::error::would_block ||
                      error == boost::asio::error::try_again) {
@@ -76,7 +74,5 @@ public:
                 return false;
             }
         }
-
-        return false;
     }
 };
