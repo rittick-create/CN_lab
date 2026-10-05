@@ -1,0 +1,25 @@
+<mxfile host="app.diagrams.net" modified="2026-09-28T00:00:00.000Z" agent="Codex" version="24.7.17">
+  <diagram id="structure" name="Assignment 2 Structure">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/><mxCell id="1" parent="0"/>
+        <mxCell id="2" value="Input file" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8EEF5;strokeColor=#2E74B5;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="30" y="190" width="110" height="54" as="geometry"/></mxCell>
+        <mxCell id="3" value="Framing&#xa;Header + 46-byte payload + CRC-32" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8EEF5;strokeColor=#2E74B5;" vertex="1" parent="1"><mxGeometry x="175" y="175" width="180" height="84" as="geometry"/></mxCell>
+        <mxCell id="4" value="ARQ sender&#xa;Stop-and-Wait / Go-Back-N / Selective Repeat" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="395" y="170" width="210" height="94" as="geometry"/></mxCell>
+        <mxCell id="5" value="Simulated DATA channel&#xa;normal delay, drop, bit flip, excessive delay" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="1"><mxGeometry x="645" y="170" width="210" height="94" as="geometry"/></mxCell>
+        <mxCell id="6" value="Receiver&#xa;size + CRC check&#xa;protocol-specific handling" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="895" y="170" width="170" height="94" as="geometry"/></mxCell>
+        <mxCell id="7" value="Output file" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="925" y="450" width="110" height="54" as="geometry"/></mxCell>
+        <mxCell id="8" value="ACK channel&#xa;normal delay, loss, corruption, excessive delay" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" vertex="1" parent="1"><mxGeometry x="640" y="340" width="220" height="82" as="geometry"/></mxCell>
+        <mxCell id="9" value="Timer + RTT update&#xa;timeout = estimated RTT + 4 × deviation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;" vertex="1" parent="1"><mxGeometry x="395" y="340" width="210" height="82" as="geometry"/></mxCell>
+        <mxCell id="20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="2" target="3"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="21" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="3" target="4"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="22" value="DATA &lt;bits&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="4" target="5"><mxGeometry x="0" y="-1" relative="1" as="geometry"><mxPoint x="0" y="-8" as="offset"/></mxGeometry></mxCell>
+        <mxCell id="23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="5" target="6"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="24" value="accepted payload" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="6" target="7"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="25" value="ACK n" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;entryX=1;entryY=0.5;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="6" target="8"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="26" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="8" target="9"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="27" value="ACK / timeout" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="9" target="4"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
