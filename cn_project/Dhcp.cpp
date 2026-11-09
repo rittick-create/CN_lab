@@ -105,7 +105,7 @@ struct ClientContext {
 };
 
 //Build the outgoing packets
-void fillDiscoverHeader(Dhcp_packet_t& packet,const ClientContext& client)
+void fillClientHeader(Dhcp_packet_t& packet,const ClientContext& client)
 {
     packet = {}; //All fields are zero
 
@@ -135,7 +135,7 @@ void fillDiscoverHeader(Dhcp_packet_t& packet,const ClientContext& client)
 */
 std::size_t buildDiscover(Dhcp_packet_t& packet,const ClientContext& client)
 {
-    fillDiscoverHeader(packet, client);
+    fillClientHeader(packet, client);
 
     std::size_t index = 0;
 
@@ -167,10 +167,64 @@ std::size_t buildDiscover(Dhcp_packet_t& packet,const ClientContext& client)
     return offsetof(Dhcp_packet_t, options) + index;
 };
 
-// std::size_t buildRequest(
-//     Dhcp_packet_t& packet,
-//     const ClientContext& client
-// );
+/*
+    DHCPRequest using the OFFER info extracted by the parse Reply
+*/
+std::size_t buildRequest(Dhcp_packet_t& packet,const ClientContext& client)
+{
+    fillClientHeader(packet,client);
+
+    std::size_t index=0;
+
+    // Option 53: DHCP message type
+    packet.options[index++] = DHCP_OPTION_MSG_TYPE;
+    packet.options[index++] = 1;
+    packet.options[index++] = DHCPREQUEST;
+
+    // Option 50: Requested IP address
+    packet.options[index++] = DHCP_OPTION_REQUESTED_IP;
+    packet.options[index++] = 4;
+
+    std::memcpy(packet.options+index,&client.offeredIp,sizeof(client.offeredIp));
+    index+=sizeof(client.offeredIp);
+
+    // Option 54: Selected DHCP server
+    packet.options[index++] = DHCP_OPTION_SERVER_ID;
+    packet.options[index++] = 4;
+
+    std::memcpy(
+        packet.options + index,
+        &client.serverIp,
+        sizeof(client.serverIp)
+    );
+    index += sizeof(client.serverIp);
+
+    // Option 55: Same parameter request list as DISCOVER
+    packet.options[index++] = DHCP_OPTION_PARAM_REQ_LIST;
+    packet.options[index++] = 5;
+    packet.options[index++] = DHCP_OPTION_SUBNET_MASK;
+    packet.options[index++] = DHCP_OPTION_ROUTER;
+    packet.options[index++] = DHCP_OPTION_DNS_SERVER;
+    packet.options[index++] = DHCP_OPTION_LEASE_TIME;
+    packet.options[index++] = DHCP_OPTION_SERVER_ID;
+
+    // Option 61: Same client identifier as DISCOVER
+    packet.options[index++] = DHCP_OPTION_CLIENT_ID;
+    packet.options[index++] = 7;
+    packet.options[index++] = 1;  // Ethernet
+
+    std::memcpy(
+        packet.options + index,
+        client.mac,
+        sizeof(client.mac)
+    );
+    index += sizeof(client.mac);
+
+    // End of options
+    packet.options[index++] = DHCP_OPTION_END;
+
+    return offsetof(Dhcp_packet_t, options) + index;
+};
 
 
 // //Handle UDP communication
@@ -188,20 +242,119 @@ std::size_t buildDiscover(Dhcp_packet_t& packet,const ClientContext& client)
 // );
 
 
-// //Parse and validate incoming packets
-// struct ParsedReply {
-//     uint8_t messageType{};
-//     uint32_t offeredIp{};     // Network byte order
-//     uint32_t serverIp{};      // Network byte order
-//     uint32_t leaseSeconds{};  // Host byte order
-// };
+//Parse and validate incoming packets
+struct ParsedReply {
+    uint8_t messageType{};
+    uint32_t offeredIp{};     // Network byte order
+    uint32_t serverIp{};      // Network byte order
+    uint32_t leaseSeconds{};  // Host byte order
+};
 
-// bool parseReply(
-//     const Dhcp_packet_t& packet,
-//     std::size_t receivedLength,
-//     const ClientContext& client,
-//     ParsedReply& reply
-// );
+bool parseReply(const Dhcp_packet_t& packet,std::size_t receivedLength,const ClientContext& client,ParsedReply& reply)
+{
+    constexpr std::size_t optionsOffset = offsetof(Dhcp_packet_t, options);
+
+    // Check length before accessing packet fields.
+    if (receivedLength < optionsOffset ||receivedLength > sizeof(packet)) {return false;}
+
+    // Validate the fixed header and client identity.
+    if (packet.op != BOOTREPLY ||
+        packet.htype != 1 ||
+        packet.hlen != sizeof(client.mac) ||
+        ntohl(packet.xid) != client.transactionId ||
+        ntohl(packet.magic_cookie) != DHCP_MAGIC_COOKIE ||
+        std::memcmp(packet.chaddr, client.mac,
+        sizeof(client.mac)) != 0){return false;}
+
+    ParsedReply parsed{};
+    parsed.offeredIp = packet.yiaddr;
+
+    const std::size_t optionsLength = receivedLength - optionsOffset;
+    std::size_t index = 0;
+
+    bool foundMessageType = false;
+    bool foundServerId = false;
+    bool foundEnd = false;
+
+    while (index < optionsLength) {
+        uint8_t code = packet.options[index++];
+
+        if (code == DHCP_OPTION_END) {
+            foundEnd = true;
+            break;
+        }
+
+        if (code == DHCP_OPTION_PAD) {
+            continue;
+        }
+
+        // Every other option needs a length byte.
+        if (index >= optionsLength) {
+            return false;
+        }
+
+        uint8_t length = packet.options[index++];
+
+        // Ensure the option's data fits in the received bytes.
+        if (length > optionsLength - index) {
+            return false;
+        }
+
+        const uint8_t* data = packet.options + index;
+
+        switch (code) {
+            case DHCP_OPTION_MSG_TYPE:
+                if (length != 1 || foundMessageType) {
+                    return false;
+                }
+
+                parsed.messageType = data[0];
+                foundMessageType = true;
+                break;
+
+            case DHCP_OPTION_SERVER_ID:
+                if (length != 4 || foundServerId) {
+                    return false;
+                }
+
+                std::memcpy(&parsed.serverIp, data, 4);
+                foundServerId = true;
+                break;
+
+            case DHCP_OPTION_LEASE_TIME: {
+                if (length != 4) {
+                    return false;
+                }
+
+                uint32_t networkLease{};
+                std::memcpy(&networkLease, data, 4);
+                parsed.leaseSeconds = ntohl(networkLease);
+                break;
+            }
+
+            default:
+                // Skip options this parser doesn't extract.
+                break;
+        }
+
+        index += length;
+    }
+
+    if (!foundEnd || !foundMessageType || !foundServerId) {
+        return false;
+    }
+
+    // This client handles these three server message types.
+    if (parsed.messageType != DHCPOFFER &&
+        parsed.messageType != DHCPACK &&
+        parsed.messageType != DHCPNAK) {
+        return false;
+    }
+
+    // Only update the output after successful parsing.
+    reply = parsed;
+    return true;
+}
 
 
 // //Printing
@@ -217,7 +370,7 @@ int main() {
     std::memcpy(client.mac, mac, sizeof(mac));
 
     Dhcp_packet_t discover{};
-    fillDiscoverHeader(discover, client);
+    fillClientHeader(discover, client);
 
     // Prepare client MAC and transaction ID.
     // Create the socket.
