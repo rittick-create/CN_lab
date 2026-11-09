@@ -1,0 +1,194 @@
+ASSIGNMENT 3 - HOW TO RUN AND WHAT THE COMMANDS MEAN
+
+1. OPEN THE ASSIGNMENT DIRECTORY
+
+   cd /Users/rittickdutta/Desktop/CN_lab/assignment3
+
+   cd changes the terminal's current directory to the assignment folder.
+   Run all the following commands from this folder.
+   Requirements: macOS or Linux with make and a C++17 compiler.
+
+2. BUILD THE PROGRAMS
+
+   make
+
+   Compiles the C++ code and creates three executable programs:
+   sender_app   - one station that attempts to transmit frames.
+   receiver_app - the shared channel that receives frames.
+   evaluate_app - automatically starts stations and runs experiments.
+
+3. RUN THE DEFAULT SIMULATION
+
+   ./evaluate_app
+
+   ./ means run the executable in the current directory.
+   Runs 4 stations using CSMA/CD, with 5 frames per station and seed 1.
+   The receiver and independent station processes start automatically.
+   Prints collisions, average delay, throughput, and efficiency.
+   Saves metrics in output/run_results.csv and deliveries in output/received.csv.
+
+4. TRY EACH CSMA SCHEME
+
+   ./evaluate_app 4 non
+   Runs 4 stations using Non-Persistent CSMA.
+
+   ./evaluate_app 4 one
+   Runs 4 stations using 1-Persistent CSMA.
+
+   ./evaluate_app 4 p 5 0.25
+   Runs 4 stations using p-Persistent CSMA, with 5 frames per station.
+   Each station transmits with probability 0.25 when it senses an idle slot.
+
+   ./evaluate_app 4 cd
+   Runs 4 stations using CSMA/CD (collision detection and early abortion).
+
+   Full command format:
+   ./evaluate_app stations scheme [frames] [p] [seed]
+
+   stations - number of independent station processes (1 to 128).
+   scheme   - non, one, p, or cd.
+   frames   - frames sent by EACH station; default 5.
+   p        - idle-slot transmission probability; default 0.5.
+              Must be greater than 0 and at most 1; used only by scheme p.
+   seed     - starting value for random decisions; default 1.
+              Each station uses seed plus its station number.
+
+   Square brackets mean optional arguments; do not type the brackets.
+   Arguments are positional: provide earlier ones before supplying later ones.
+
+   Example:
+   ./evaluate_app 8 p 10 0.25 2
+   Runs 8 stations, each sending 10 frames, using p-Persistent CSMA,
+   probability 0.25, and seed 2.
+
+5. GENERATE ALL COMPARISONS AND PLOTS
+
+   ./evaluate_app --sweep
+
+   --sweep selects the complete evaluation instead of a single experiment.
+   First tests p = 0.1, 0.25, 0.5, 0.75, 1 at fixed N = 4 stations.
+   Selects the tested p with the highest mean throughput.
+   Then compares all four schemes at N = 2, 4, 8, 12 stations.
+   Uses 3 seeds and 5 frames per station for every setting: 63 runs total.
+
+   Output files:
+   p_results.csv, N_results.csv - measurements for individual runs.
+   p_collisions.svg, p_delay.svg, p_throughput.svg - plots against p.
+   N_collisions.svg, N_delay.svg, N_throughput.svg - plots against N.
+   best_p.txt - best tested probability for the fixed-N workload.
+   received.csv - frame deliveries from the last run (overwritten each run).
+
+   open output
+
+   On macOS, opens the output folder in Finder.
+   Open an SVG file in a web browser to view its plot.
+   On Linux, use your file manager or xdg-open output.
+
+6. MANUAL RUN USING THREE TERMINALS
+
+   First run the cd command from step 1 in EACH terminal.
+
+   Terminal 1:
+   ./receiver_app 2 cd
+   Starts the shared channel for 2 stations using CSMA/CD.
+   Waits until both stations connect before starting the simulation.
+
+   Terminal 2:
+   ./sender_app 0 cd
+   Starts station number 0 using CSMA/CD and sends a greeting to station 1.
+
+   Terminal 3:
+   ./sender_app 1 cd
+   Starts station number 1 using CSMA/CD and sends a greeting to station 0.
+
+   Defaults are 5 frames per station and TCP port 8080 on localhost.
+   The receiver prints the final metrics and saves output/received.csv.
+   Restart the receiver and senders for each new manual experiment.
+
+   Full manual command formats:
+   ./receiver_app stations scheme [frames] [port] [transmission] [propagation]
+   ./sender_app station scheme [frames] [p] [port] [seed] [destination] [message]
+
+   station - a unique nonnegative station number (for example 0 and 1).
+   port    - local TCP port used by both receiver and senders; default 8080.
+
+   Use the same scheme, frame count, and port in every terminal.
+   For p-Persistent CSMA, also use the same p for all senders.
+
+   Example with 10 frames per station and port 9090:
+   Terminal 1: ./receiver_app 2 p 10 9090
+   Terminal 2: ./sender_app 0 p 10 0.25 9090 1
+   Terminal 3: ./sender_app 1 p 10 0.25 9090 1
+
+7. UNDERSTAND THE RESULTS
+
+   Frames: total successfully received frames from all stations.
+   Slots: total simulated time slots, not real seconds.
+   Collisions: number of shared-channel collision events.
+   Average delay: mean slots from a frame becoming ready until reception.
+   Throughput: successfully received frames divided by elapsed slots.
+   Efficiency: throughput multiplied by 4, because each frame takes 4 slots.
+
+   Default transmission time is 4 slots and propagation time is 1 slot.
+   CSMA/CD detects a collision at 2 * propagation time only if the frame
+   lasts at least that long. Otherwise the failed frame produces NO_ACK
+   at frame completion and is retried; the ACK timeout is simplified.
+   Maximum throughput with the default frame time is 0.25 frames/slot.
+   Efficiency is throughput times transmission time (maximum 1).
+
+8. REMOVE COMPILED PROGRAMS
+
+   make clean
+
+   Removes sender_app, receiver_app, and evaluate_app.
+   Source code and generated results remain. Run make again to rebuild.
+
+9. SEND DATA BETWEEN THE TWO STATIONS
+
+   Run make first. Use three terminals in the assignment directory:
+
+   Terminal 1: ./receiver_app 2 cd 1 8080 4 1
+   Terminal 2: ./sender_app 0 cd 1 0.5 8080 1 1 "Hello from station 0"
+   Terminal 3: ./sender_app 1 cd 1 0.5 8080 1 0 "Hello from station 1"
+
+   Receiver arguments: 2 stations, cd scheme, 1 frame each, port 8080,
+   transmission time 4 slots, and one-way propagation time 1 slot.
+   Sender arguments: station number, scheme, frames, p, port, seed,
+   destination station number, and a message enclosed in quotes.
+   Station 0 sends to 1; station 1 sends to 0 through the shared channel.
+   Each destination prints the source, frame number, and received text.
+   Only successful transmissions deliver data; collided data is discarded.
+   The destination must be connected. Stations 0 and 1 default to sending
+   to each other. Stations 2 and higher default to no forwarding.
+   An explicit destination of -1 disables forwarding.
+   When sending multiple frames, the same text is sent in every frame.
+
+   CSMA/CD detection condition: transmission time >= 2 * propagation time.
+   In the example, 4 >= 2 * 1, so collision detection is enabled.
+   To test a short frame, restart all three programs and change only
+   Terminal 1 to: ./receiver_app 2 cd 1 8080 1 1
+   Here 1 < 2 * 1: a collision can occur without being detected by CD.
+   The receiver reports NO_ACK and the station retries after random waiting.
+   This model applies the worst-case detection rule, not physical signal propagation.
+
+10. SHORTEST COMMANDS FOR TWO STATIONS TO EXCHANGE DATA
+
+   Run make, then use three terminals in the assignment directory:
+   Terminal 1: ./receiver_app 2 cd
+   Terminal 2: ./sender_app 0 cd
+   Terminal 3: ./sender_app 1 cd
+
+   Each station sends five greeting frames to the other station.
+   Port, probability, timing, and message defaults are selected automatically.
+   Each sender prints the messages it receives through the shared channel.
+
+Short commands to send only to the common receiver (one command per terminal):
+
+./receiver_app 2 cd
+./sender_app 0 cd -1
+./sender_app 1 cd -1
+
+A lone -1 after the scheme disables forwarding and uses five frames with
+all other defaults. Without -1, stations 0 and 1 send to each other.
+In the full positional command, the first optional positive number still
+means frames per station; the destination argument can also be set to -1.

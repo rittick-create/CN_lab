@@ -1,0 +1,2 @@
+Walsh codes let the receiver recover each station's message.
+This file has a second line to test a longer transmission.

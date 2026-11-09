@@ -1,0 +1,1 @@
+Station 2 is sending data through the shared CDMA channel.
