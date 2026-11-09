@@ -1,5 +1,14 @@
 #include <cstdint>
 #include <cstddef>
+#include <cstring>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <cstdio>
+
+using namespace std;
+
 
 // Buffer sizes
 constexpr std::size_t DHCP_CHADDR_LEN = 16;
@@ -80,3 +89,142 @@ struct Dhcp_packet_t
     uint32_t magic_cookie;                       // DHCP options marker
     uint8_t options[DHCP_OPTIONS_BUF_LEN];        // DHCP options
 };
+
+//Strore information across the exchange
+/*
+    Before DISOCVER => Set MAC and transaction ID
+    After receiving OFFER => Save offered IP AND server IP
+    When building REQUEST => Reading the saved values
+*/
+struct ClientContext {
+    uint8_t mac[6]{};
+    uint32_t transactionId{};  // Host byte order
+
+    uint32_t offeredIp{};     // The address received in an OFFER
+    uint32_t serverIp{};      // The selected server's ip address from option 54
+};
+
+//Build the outgoing packets
+void fillDiscoverHeader(Dhcp_packet_t& packet,const ClientContext& client)
+{
+    packet = {}; //All fields are zero
+
+    //htonl=>Converts 32-bit integer from host to network byte order
+    //htons=>Converts 16-bit integer from host to network byte order
+    
+    packet.op = BOOTREQUEST;
+    packet.htype = 1; //Ethernet
+    packet.hlen = 6; //MAC add. length
+    packet.hops = 0;
+
+    packet.xid = htonl(client.transactionId);
+
+    packet.secs = 0;
+    packet.flags = htons(0x8000); //Request broadcast reply
+
+    std::memcpy(packet.chaddr, client.mac, sizeof(client.mac));
+
+    packet.magic_cookie = htonl(DHCP_MAGIC_COOKIE);
+};
+
+/*
+    Uses fillDiscover to create the packet
+    Write the options into packet.options
+    Tracks how many option bytes were written
+    Returns the actual packet lenght
+*/
+std::size_t buildDiscover(Dhcp_packet_t& packet,const ClientContext& client)
+{
+    fillDiscoverHeader(packet, client);
+
+    std::size_t index = 0;
+
+    // Option 53: DHCP message type
+    packet.options[index++] = DHCP_OPTION_MSG_TYPE;
+    packet.options[index++] = 1;  // Data length
+    packet.options[index++] = DHCPDISCOVER;
+
+    // Option 55: Parameters we want the server to provide
+    packet.options[index++] = DHCP_OPTION_PARAM_REQ_LIST;
+    packet.options[index++] = 5;  // Five option codes
+    packet.options[index++] = DHCP_OPTION_SUBNET_MASK;
+    packet.options[index++] = DHCP_OPTION_ROUTER;
+    packet.options[index++] = DHCP_OPTION_DNS_SERVER;
+    packet.options[index++] = DHCP_OPTION_LEASE_TIME;
+    packet.options[index++] = DHCP_OPTION_SERVER_ID;
+
+    // Option 61: Client identifier = Ethernet type + MAC
+    packet.options[index++] = DHCP_OPTION_CLIENT_ID;
+    packet.options[index++] = 7;  // One type byte + six MAC bytes
+    packet.options[index++] = 1;  // Ethernet
+
+    std::memcpy(packet.options + index,client.mac,sizeof(client.mac));
+    index += sizeof(client.mac);
+
+    // End of options: no length byte follows
+    packet.options[index++] = DHCP_OPTION_END;
+
+    return offsetof(Dhcp_packet_t, options) + index;
+};
+
+// std::size_t buildRequest(
+//     Dhcp_packet_t& packet,
+//     const ClientContext& client
+// );
+
+
+// //Handle UDP communication
+// int createClientSocket();
+
+// bool sendPacket(
+//     int socketFd,
+//     const Dhcp_packet_t& packet,
+//     std::size_t packetLength
+// );
+
+// ssize_t receivePacket(
+//     int socketFd,
+//     Dhcp_packet_t& packet
+// );
+
+
+// //Parse and validate incoming packets
+// struct ParsedReply {
+//     uint8_t messageType{};
+//     uint32_t offeredIp{};     // Network byte order
+//     uint32_t serverIp{};      // Network byte order
+//     uint32_t leaseSeconds{};  // Host byte order
+// };
+
+// bool parseReply(
+//     const Dhcp_packet_t& packet,
+//     std::size_t receivedLength,
+//     const ClientContext& client,
+//     ParsedReply& reply
+// );
+
+
+// //Printing
+// void printPacketHeader(const Dhcp_packet_t& packet);
+// void printReply(const ParsedReply& reply);
+
+
+int main() {
+
+    ClientContext client{};
+    client.transactionId=0x12345678;
+    const uint8_t mac[6] ={0x00, 0x0C, 0x29, 0x12, 0x34, 0x56};
+    std::memcpy(client.mac, mac, sizeof(mac));
+
+    Dhcp_packet_t discover{};
+    fillDiscoverHeader(discover, client);
+
+    // Prepare client MAC and transaction ID.
+    // Create the socket.
+    // Build and send DISCOVER.
+    // Wait for a valid OFFER.
+    // Save its offered IP and server identifier.
+    // Build and send REQUEST.
+    // Wait for a matching ACK or NAK.
+    // Print the result and close the socket.
+}
