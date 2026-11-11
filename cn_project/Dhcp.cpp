@@ -138,7 +138,7 @@ struct ParsedReply {
     uint32_t leaseSeconds{};  // Host byte order
 };
 
-//creating the dhcpDiscover packet
+//DHCPDISCOVER
 Dhcp_packet_t dhcpDiscover(Dhcp_packet_t discover,const ClientContext& client){
     
     discover={};//reset 
@@ -477,4 +477,73 @@ bool parseReply(const Dhcp_packet_t &packet,std::size_t receivedLength,const Cli
     }
 
     return false;
+}
+
+//print the  parsed msg
+void printReply(const ParsedReply& reply) {
+    std::printf("-------------------Printing the parsed Reply msg---------------------\n");
+    in_addr address{};
+
+    address.s_addr = reply.serverIp;
+    std::printf("Server IP: %s\n", inet_ntoa(address));
+
+    address.s_addr = reply.offeredIp;
+    std::printf("Client IP: %s\n", inet_ntoa(address));
+
+    std::printf("Message type: %u\n", unsigned(reply.messageType));
+    std::printf("Lease: %u seconds\n", unsigned(reply.leaseSeconds));
+}
+
+//DHCPREQUEST
+std::size_t dhcpRequest(Dhcp_packet_t &request , const ClientContext &client){
+    request = {};
+
+    //header 
+    request.op=BOOTREQUEST;
+    request.htype=1;//ethernet
+    request.hlen=6;//mac address length
+    request.hops=0;
+
+    request.xid=htonl(client.transactionId);
+    request.secs=0;
+    request.flags=htons(0x8000);
+
+    std::memcpy(request.chaddr,client.mac,sizeof(client.mac));
+
+    //options
+    request.magic_cookie = htonl(DHCP_MAGIC_COOKIE);
+
+    std::size_t index = 0;
+
+    // Option 53: Identify this message as DHCPrequest.
+    request.options[index++] = DHCP_OPTION_MSG_TYPE;
+    request.options[index++] = 1;  // Data length
+    request.options[index++] = DHCPREQUEST;
+
+    // Option 50: Requested IP address
+    request.options[index++] = DHCP_OPTION_REQUESTED_IP;
+    request.options[index++] = 4;
+    std::memcpy(request.options + index, &client.offeredIp, 4);
+    index += 4;
+
+    // Option 54: Selected DHCP server
+    request.options[index++] = DHCP_OPTION_SERVER_ID;
+    request.options[index++] = 4;
+
+    std::memcpy(request.options + index, &client.serverIp, 4);
+    index += 4;
+
+
+    // Option 55: Same parameters requested in DISCOVER
+    request.options[index++] = DHCP_OPTION_PARAM_REQ_LIST;
+    request.options[index++] = 3;
+    request.options[index++] = DHCP_OPTION_SUBNET_MASK;
+    request.options[index++] = DHCP_OPTION_ROUTER;
+    request.options[index++] = DHCP_OPTION_DNS_SERVER;
+
+    request.options[index++] = DHCP_OPTION_END;
+
+
+    return offsetof(Dhcp_packet_t, options) + index;
+
 }
