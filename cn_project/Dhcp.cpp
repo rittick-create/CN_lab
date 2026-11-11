@@ -1,13 +1,30 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <unistd.h>
 #include <cstdio>
+#include <cerrno>
 
+//headers to be loaded according to the os
+#ifdef _WIN32
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
 
+    using SocketHandle = SOCKET;
+    using SocketLength = int;
+
+    constexpr SocketHandle INVALID_SOCKET_HANDLE = INVALID_SOCKET;
+#else
+    #include <sys/socket.h>
+    #include <sys/time.h>
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+    #include <unistd.h>
+
+    using SocketHandle = int;
+    using SocketLength = socklen_t;
+
+    constexpr SocketHandle INVALID_SOCKET_HANDLE = -1;
+#endif
 
 
 using namespace std;
@@ -93,6 +110,12 @@ struct Dhcp_packet_t
     uint8_t options[DHCP_OPTIONS_BUF_LEN];        // DHCP options
 };
 
+//checks packet's memory layout at compile time
+//from packet start till magic cookies fixed sixe of 236 bytes
+//magic cookie of 4 bytes
+static_assert(offsetof(Dhcp_packet_t, magic_cookie) == 236);
+static_assert(offsetof(Dhcp_packet_t, options) == 240);
+
 //Strore information across the exchange
 /*
     Before DISOCVER => Set MAC and transaction ID
@@ -127,7 +150,7 @@ Dhcp_packet_t dhcpDiscover(Dhcp_packet_t discover,const ClientContext& client){
 
     discover.xid=htonl(client.transactionId);
     discover.secs=0;
-    discover.flags=htons(0x8000);;
+    discover.flags=htons(0x8000);
 
     std::memcpy(discover.chaddr,client.mac,sizeof(client.mac));
 
@@ -159,5 +182,221 @@ std::size_t addDiscoverOptions(Dhcp_packet_t& discover) {
     discover.options[index++] = DHCP_OPTION_END;
 
     return offsetof(Dhcp_packet_t, options) + index;
+}
+
+// Initialize networking
+//     ↓
+// Create UDP socket
+//     ↓
+// Enable broadcast + set timeout + bind port 68
+//     ↓
+// Send DISCOVER to port 67
+//     ↓
+// Receive reply
+//     ↓
+// Close socket and clean up
+
+//Printing the most recent socket error
+void printSocketError(const char *operation)
+{
+    #ifdef _WIN32
+        std::fprintf(
+            stderr, "%s failed: %d\n",
+            operation, WSAGetLastError());
+    #else
+        std::perror(operation);
+    #endif
+
+}
+
+
+//Windows uses Winsock initialization
+//macOS/Linux need no explicit initialization
+bool initializeNetworking(){
+    #ifdef _WIN32
+        WSADATA  data{};
+        int result = WSAStartup(MAKEWORD(2, 2), &data);
+        if (result != 0) {
+        std::fprintf(stderr, "WSAStartup failed: %d\n", result);
+        return false;
+        }
+    #endif   
+        return true;
+}
+
+// Close socket.
+void closeClientSocket(SocketHandle sock) {
+    if (sock == INVALID_SOCKET_HANDLE) {
+        return;
+    }
+
+#ifdef _WIN32
+    closesocket(sock);
+#else
+    close(sock);
+#endif
+}
+
+// Balance successful Windows initialization.
+void cleanupNetworking() {
+#ifdef _WIN32
+    WSACleanup();
+#endif
+}
+
+
+//Creating and configuring the DHCP clinet's UDP socket.
+
+SocketHandle createClientSocket(){
+    SocketHandle sock = ::socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP);//Selects ipv4,datagram socket and udp
+    
+    if(sock == INVALID_SOCKET_HANDLE){
+        printSocketError("socket");
+        return INVALID_SOCKET_HANDLE;
+    }
+
+    //permit sending to broadcast addresses
+    int enabled=1;
+
+    //enables broadcast on sock
+    if (::setsockopt(sock, SOL_SOCKET, SO_BROADCAST, reinterpret_cast<const char *>(&enabled), sizeof(enabled)) != 0)
+    {
+        printSocketError("SO_BROADCAST");
+        closeClientSocket(sock);
+        return INVALID_SOCKET_HANDLE;
+    }
+
+    /*
+    takes an already-created UDP socket, sets how 
+    long it should wait for a reply, 
+    and gives it a local port on which to receive DHCP messages.
+    */
+#ifdef _WIN32
+    DWORD timeout = 5000;  // Milliseconds
+#else
+    timeval timeout{};
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+#endif
+
+    if (::setsockopt(
+            sock,
+            SOL_SOCKET,
+            SO_RCVTIMEO,
+            reinterpret_cast<const char*>(&timeout),
+            sizeof(timeout)
+        ) != 0) {
+
+        printSocketError("SO_RCVTIMEO");
+        closeClientSocket(sock);
+        return INVALID_SOCKET_HANDLE;
+    }
+
+    // Local endpoint: all local IPv4 addresses, client port 68.
+    sockaddr_in local{};
+    local.sin_family = AF_INET;
+    local.sin_port = htons(68);
+    local.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    if (::bind(
+            sock,
+            reinterpret_cast<const sockaddr*>(&local),
+            sizeof(local)
+        ) != 0) {
+
+        printSocketError("bind port 68");
+        closeClientSocket(sock);
+        return INVALID_SOCKET_HANDLE;
+    }
+
+    return sock;
+
+}
+
+
+bool sendPacket(
+    SocketHandle sock,
+    const Dhcp_packet_t& packet,
+    std::size_t packetLength
+) {
+    if (packetLength < offsetof(Dhcp_packet_t, options) ||
+        packetLength > sizeof(packet)) {
+        std::fprintf(stderr, "Invalid packet length\n");
+        return false;
+    }
+
+    // Destination: broadcast IP, DHCP server port 67.
+    sockaddr_in destination{};
+    destination.sin_family = AF_INET;
+    destination.sin_port = htons(67);
+    destination.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+
+    int sent = static_cast<int>(::sendto(
+        sock,
+        reinterpret_cast<const char*>(&packet),
+        static_cast<int>(packetLength),
+        0,
+        reinterpret_cast<const sockaddr*>(&destination),
+        sizeof(destination)
+    ));
+
+    if (sent < 0) {
+        printSocketError("sendto");
+        return false;
+    }
+
+    return sent == static_cast<int>(packetLength);
+}
+
+// Returns:
+//   > 0 : received byte count
+//     0 : timeout
+//    -1 : error or rejected datagram
+int receivePacket(SocketHandle sock, Dhcp_packet_t& packet) {
+    // Receive the whole datagram before checking our structure's capacity.
+    char buffer[65536];
+
+    sockaddr_in source{};
+    SocketLength sourceLength = sizeof(source);
+
+    int received = static_cast<int>(::recvfrom(
+        sock,
+        buffer,
+        sizeof(buffer),
+        0,
+        reinterpret_cast<sockaddr*>(&source),
+        &sourceLength
+    ));
+
+    if (received < 0) {
+#ifdef _WIN32
+        int error = WSAGetLastError();
+
+        if (error == WSAETIMEDOUT || error == WSAEWOULDBLOCK) {
+            return 0;
+        }
+#else
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            return 0;
+        }
+#endif
+
+        printSocketError("recvfrom");
+        return -1;
+    }
+
+    if (source.sin_family != AF_INET ||
+        ntohs(source.sin_port) != 67 ||
+        received < static_cast<int>(offsetof(Dhcp_packet_t, options)) ||
+        received > static_cast<int>(sizeof(packet))) {
+
+        std::fprintf(stderr, "Rejected unexpected UDP datagram\n");
+        return -1;
+    }
+
+    packet = {};
+    std::memcpy(&packet, buffer, static_cast<std::size_t>(received));
+
+    return received;
 }
 
