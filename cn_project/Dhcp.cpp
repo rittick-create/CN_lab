@@ -50,7 +50,7 @@ constexpr uint8_t DHCPNAK = 6;
 constexpr uint8_t DHCPRELEASE = 7;
 constexpr uint8_t DHCPINFORM = 8;
 
-// DHCP option codes
+// DHCP option codes=> follows [code,length ,data]
 constexpr uint8_t DHCP_OPTION_PAD = 0;
 constexpr uint8_t DHCP_OPTION_SUBNET_MASK = 1;
 constexpr uint8_t DHCP_OPTION_ROUTER = 3;
@@ -400,3 +400,81 @@ int receivePacket(SocketHandle sock, Dhcp_packet_t& packet) {
     return received;
 }
 
+//iterprets the received bytes
+// validate the header -> walk through options -> extract values ->save the result at END.
+bool parseReply(const Dhcp_packet_t &packet,std::size_t receivedLength,const ClientContext& client,ParsedReply& reply){
+
+    //check the size
+    constexpr std::size_t headerLength = offsetof(Dhcp_packet_t,options);
+    if(receivedLength<headerLength || receivedLength>sizeof(packet))return false;
+
+    //check that this is a reply for our Ethernet client
+    if (packet.op != BOOTREPLY ||
+        packet.htype != 1 ||
+        packet.hlen != sizeof(client.mac) ||
+        ntohl(packet.xid) != client.transactionId ||
+        ntohl(packet.magic_cookie) != DHCP_MAGIC_COOKIE ||
+        std::memcmp(packet.chaddr, client.mac, sizeof(client.mac)) != 0) {
+        return false;
+    }
+
+    ParsedReply result{};
+    result.offeredIp=packet.yiaddr;
+
+    const std::size_t optionsLength = receivedLength - headerLength;
+    std::size_t index=0;
+
+    while(index<optionsLength){
+        uint8_t code = packet.options[index++];
+        if (code == DHCP_OPTION_END) {
+
+            bool knownType =result.messageType == DHCPOFFER ||result.messageType == DHCPACK ||result.messageType == DHCPNAK;
+
+            if (!knownType || result.serverIp == 0) return false;
+            if (result.messageType != DHCPNAK &&(result.offeredIp == 0 || result.leaseSeconds == 0))return false;
+
+            reply=result;
+            return true;
+
+        }
+
+        if (code == DHCP_OPTION_PAD) {
+            continue;
+        }
+
+        if (index >= optionsLength) {
+            return false;  // Missing length byte
+        }
+
+        uint8_t length = packet.options[index++];
+        if (length > optionsLength - index) {
+            return false;  // Data extends beyond received bytes
+        }
+
+        const uint8_t* data = packet.options + index;
+
+        switch (code) {
+            case DHCP_OPTION_MSG_TYPE:
+                if (length != 1) return false;
+                result.messageType = data[0];
+                break;
+
+            case DHCP_OPTION_SERVER_ID:
+                if (length != 4) return false;
+                std::memcpy(&result.serverIp, data, 4);
+                break;
+
+            case DHCP_OPTION_LEASE_TIME: {
+                if (length != 4) return false;
+                uint32_t lease{};
+                std::memcpy(&lease, data, 4);
+                result.leaseSeconds = ntohl(lease);
+                break;
+            }
+        }
+
+        index += length;
+    }
+
+    return false;
+}
